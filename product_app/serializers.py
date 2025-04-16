@@ -9,30 +9,31 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SecurityIssue
-        fields = '__all__'
-
+        fields = [
+            'id', 'image', 'cve_id', 'cvss_score', 'severity', 'affected_libraries',
+            'library_path', 'description', 'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class ImageSerializer(serializers.ModelSerializer):
     security_issues = SecurityIssueSerializer(many=True, read_only=True)
-    ot2_pass = serializers.ChoiceField(choices=[('Yes', 'Yes'), ('No', 'No')])  # Serialize ot2_pass to 'Yes'/'No'
+    ot2_pass = serializers.ChoiceField(choices=[('Yes', 'Yes'), ('No', 'No')])
 
     class Meta:
         model = Image
-        fields = ['image_url', 'build_number', 'release_date', 'ot2_pass', 'twistlock_report_url', 
-                  'twistlock_report_clean', 'is_deleted', 'product', 'timestamp', 'security_issues']
-
-    def get_ot2_pass(self, obj):
-        # This method returns 'Yes' if True, 'No' if False
-        return "Yes" if obj.ot2_pass else "No"
+        fields = [
+            'id', 'image_url', 'build_number', 'release_date', 'ot2_pass',
+            'twistlock_report_url', 'twistlock_report_clean', 'is_deleted',
+            'product', 'created_at', 'updated_at', 'security_issues'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
 
     def validate_ot2_pass(self, value):
-        # Converts 'Yes'/'No' into True/False
-        if value == 'Yes':
-            return True
-        elif value == 'No':
-            return False
+        if value not in ['Yes', 'No']:
+            raise serializers.ValidationError("ot2_pass must be 'Yes' or 'No'")
         return value
+
 
 class ProductSerializer(serializers.ModelSerializer):
     images = ImageSerializer(many=True, read_only=True)
@@ -41,35 +42,54 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['name', 'version', 'status', 'is_deleted', 'timestamp', 'images', 'related_patches', 'patches']
+        fields = [
+            'name', 'version', 'status', 'is_deleted', 'created_at',
+            'updated_at', 'images', 'related_patches', 'patches'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
 
     def get_related_patches(self, obj):
-        # Get patches related to this product and return their names only
+        # Access from Patch side using related_name 'patches_set'
         patches = obj.patches_set.filter(is_deleted=False)
         return [patch.name for patch in patches]
 
     def create(self, validated_data):
         patches = validated_data.pop('patches', [])
         product = Product.objects.create(**validated_data)
-        product.patches.set(patches)  # Use patches_set to link patches to product
+        for patch in patches:
+            patch.related_products.add(product)
         return product
 
     def update(self, instance, validated_data):
         patches = validated_data.pop('patches', [])
         instance = super().update(instance, validated_data)
-        instance.patches.set(patches)  # Update patches using patches_set
+        
+        # Clear existing and add new
+        instance.patches_set.clear()
+        for patch in patches:
+            patch.related_products.add(instance)
         return instance
+
 
 class PatchSerializer(serializers.ModelSerializer):
     related_products = ProductSerializer(many=True, read_only=True)
 
     class Meta:
         model = Patch
-        fields = '__all__'
+        fields = [
+            'name', 'release', 'description', 'patch_version', 'related_products',
+            'is_deleted', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
 
 class ReleaseSerializer(serializers.ModelSerializer):
     patches = PatchSerializer(many=True, read_only=True)
 
     class Meta:
         model = Release
-        fields = '__all__'
+        fields = [
+            'name', 'release_date', 'customers', 'active',
+            'is_deleted', 'created_at', 'updated_at', 'patches'
+        ]
+        read_only_fields = ['created_at', 'updated_at']

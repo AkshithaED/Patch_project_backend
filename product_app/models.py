@@ -26,8 +26,9 @@ class Release(models.Model):
     active = models.BooleanField(default=defaults['release']['active'])
 
     # Timestamp
-    timestamp = models.OneToOneField(Timestamp, on_delete=models.CASCADE, default=create_timestamp_id)
-
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    
     # Soft delete
     is_deleted = models.BooleanField(default=False)
 
@@ -46,7 +47,8 @@ class Product(models.Model):
     status = models.CharField(max_length=50, choices=[('Active', 'Active'), ('Inactive', 'Inactive')], default=defaults['product']['status'])
 
     # Timestamp
-    timestamp = models.OneToOneField(Timestamp, on_delete=models.CASCADE, default=create_timestamp_id)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     # Soft delete
     is_deleted = models.BooleanField(default=False)
@@ -67,7 +69,8 @@ class Patch(models.Model):
     patch_version = models.CharField(max_length=50, default=defaults['patch']['patch_version'])
 
     # Timestamp
-    timestamp = models.OneToOneField(Timestamp, on_delete=models.CASCADE, default=create_timestamp_id)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     # Many-to-many relationship with Product
     related_products = models.ManyToManyField(Product, related_name="patches_set")
@@ -95,8 +98,8 @@ class SecurityIssue(models.Model):
     description = models.TextField(default="Security issue description")
 
     # Timestamp
-    timestamp = models.OneToOneField(Timestamp, on_delete=models.CASCADE, default=create_timestamp_id)
-
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
     # Soft delete
     is_deleted = models.BooleanField(default=False)
 
@@ -128,7 +131,8 @@ class Image(models.Model):
     twistlock_report_clean = models.BooleanField(default=True)
 
     # Timestamp
-    timestamp = models.OneToOneField(Timestamp, on_delete=models.CASCADE, default=create_timestamp_id)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     # Soft delete
     is_deleted = models.BooleanField(default=False)
