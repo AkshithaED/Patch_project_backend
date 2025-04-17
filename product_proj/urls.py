@@ -23,6 +23,5 @@ from rest_framework.authtoken.views import obtain_auth_token
 from django.shortcuts import redirect
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('product_app.urls')),  # 👈 now shows browsable API root
-    #vpath('api/', include('product_app.urls')),  # optional, keep if needed
+    path('', include('product_app.urls')),  # include the app urls
 ]
