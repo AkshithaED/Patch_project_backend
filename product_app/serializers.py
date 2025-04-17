@@ -10,7 +10,7 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = SecurityIssue
         fields = [
-            'id', 'image', 'cve_id', 'cvss_score', 'severity', 'affected_libraries',
+            'image', 'cve_id', 'cvss_score', 'severity', 'affected_libraries',
             'library_path', 'description', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -23,7 +23,7 @@ class ImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Image
         fields = [
-            'id', 'image_url', 'build_number', 'release_date', 'ot2_pass',
+            'image_url', 'build_number', 'release_date', 'ot2_pass',
             'twistlock_report_url', 'twistlock_report_clean', 'is_deleted',
             'product', 'created_at', 'updated_at', 'security_issues'
         ]
