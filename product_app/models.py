@@ -5,19 +5,6 @@ from django.conf import settings
 
 defaults = settings.DEFAULTS
 
-# new timestamp function
-def create_timestamp_id():
-    return Timestamp.objects.create().pk
-
-# Created and updated times
-class Timestamp(models.Model):
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"Created: {self.created_at}, Updated: {self.updated_at}"
-
-
 # Release model
 class Release(models.Model):
     name = models.CharField(max_length=255, primary_key=True, default=defaults['release']['name'])  # PRIMARY KEY
@@ -28,7 +15,7 @@ class Release(models.Model):
     # Timestamp
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     # Soft delete
     is_deleted = models.BooleanField(default=False)
 
