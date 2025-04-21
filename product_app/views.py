@@ -106,7 +106,7 @@ class SecurityIssueByImageView(APIView):
 # -----------------------
 @api_view(['POST'])
 def create_image(request):
-    if not (request.user.is_staff or request.user.role == 'product_owner'):
+    if not (request.user.is_staff or request.user.role in ['product_owner', 'product_manager']):
         return Response(
             {"detail": "You do not have permission to perform this action."},
             status=status.HTTP_403_FORBIDDEN
