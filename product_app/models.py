@@ -17,7 +17,6 @@ class CustomUser(AbstractUser):
     )
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='end_user')
 
-    # Fix for reverse accessor clashes
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='customuser_set',
@@ -42,6 +41,7 @@ class CustomUser(AbstractUser):
 class Release(models.Model):
     name = models.CharField(max_length=255, primary_key=True, default=defaults['release']['name'])
     release_date = models.DateField(default=defaults['release']['release_date'])
+    release_version = models.CharField(max_length=50, default=defaults['release']['release_version'])
     active = models.BooleanField(default=defaults['release']['active'])
 
     created_at = models.DateTimeField(default=timezone.now, editable=False)
@@ -91,7 +91,7 @@ class Patch(models.Model):
     description = models.TextField(default=defaults['patch']['description'])
     patch_version = models.CharField(max_length=50, default=defaults['patch']['patch_version'])
 
-    patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new')  # <-- New field
+    patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new') 
 
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -108,7 +108,10 @@ class Patch(models.Model):
         return f"Patch {self.name} for {self.release.name}"
 
         return f"Patch {self.name} for {self.release.name}"
-
+    
+# -----------------------
+# Security Issues Model
+# -----------------------
 class SecurityIssue(models.Model):
     image = models.ForeignKey('Image', related_name='security_issues_set', on_delete=models.CASCADE)
     cve_id = models.CharField(max_length=255, default=defaults['security_issue']['cve_id'])
@@ -130,7 +133,11 @@ class SecurityIssue(models.Model):
 
     def __str__(self):
         return f"Security Issue {self.cve_id}"
+    
 
+# -----------------------
+# Image Model
+# -----------------------
 class Image(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
     image_url = models.URLField(default=defaults['image']['image_url'])

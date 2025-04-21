@@ -112,6 +112,7 @@ DEFAULTS = {
     'release': {
         'name': 'Default Release Name',
         'release_date': '2023-01-01',
+        'release_version': 'Default version',
         'customers': 'Default Customers',
         'active': True,
     },
