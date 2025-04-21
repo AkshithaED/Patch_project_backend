@@ -77,10 +77,12 @@ class PatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patch
         fields = [
-            'name', 'release', 'description', 'patch_version', 'related_products',
-            'is_deleted', 'created_at', 'updated_at'
+            'name', 'release', 'description', 'patch_version',
+            'patch_state',  
+            'related_products', 'is_deleted', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
 
 
 class ReleaseSerializer(serializers.ModelSerializer):

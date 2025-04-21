@@ -80,10 +80,18 @@ class Product(models.Model):
 # Patch Model
 # -----------------------
 class Patch(models.Model):
+    PATCH_STATE_CHOICES = [
+        ('new', 'New'),
+        ('rejected', 'Rejected'),
+        ('verified', 'Verified'),
+    ]
+
     release = models.ForeignKey('Release', related_name="patches", on_delete=models.CASCADE)
     name = models.CharField(max_length=255, primary_key=True, default=defaults['patch']['name'])
     description = models.TextField(default=defaults['patch']['description'])
     patch_version = models.CharField(max_length=50, default=defaults['patch']['patch_version'])
+
+    patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new')  # <-- New field
 
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -97,6 +105,8 @@ class Patch(models.Model):
         self.save()
 
     def __str__(self):
+        return f"Patch {self.name} for {self.release.name}"
+
         return f"Patch {self.name} for {self.release.name}"
 
 class SecurityIssue(models.Model):
