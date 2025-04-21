@@ -1,0 +1,7 @@
+role                  email                        username            password
+----------------------------------------------------------------------------------------------
+Admin                 12345@gmail.com              12345               12345
+Admin                 admin@gmail.com              Admin1              12345678admn
+Product Owner         productowner@gmail.com       ProductOwner1       12345678owner
+Product Manager       productmanager@gmail.com     ProductManager1     12345678manager
+End User              enduser@gmail.com            EndUser1            12345678enduser
