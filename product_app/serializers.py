@@ -89,7 +89,7 @@ class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Release
         fields = [
-            'name', 'release_date', 'customers', 'active',
+            'name', 'release_date', 'active',
             'is_deleted', 'created_at', 'updated_at', 'patches'
         ]
         read_only_fields = ['created_at', 'updated_at']

@@ -10,37 +10,36 @@ from .serializers import (
     ReleaseSerializer, PatchSerializer, ProductSerializer,
     ImageSerializer, SecurityIssueSerializer
 )
-from .permissions import (
-    IsAdmin, IsProductManager, IsProductOwner,
-    ReadOnly, IsAdminOrReadOnly,
-    IsProductManagerOrReadOnly,
-    IsProductOwnerOrReadOnly
-)
-
-class ReleaseViewSet(viewsets.ModelViewSet):
-    queryset = Release.objects.all()
-    serializer_class = ReleaseSerializer
-    permission_classes = [IsAuthenticated & (IsAdminOrReadOnly | ReadOnly)]
-
-class PatchViewSet(viewsets.ModelViewSet):
-    queryset = Patch.objects.all()
-    serializer_class = PatchSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsProductManager | ReadOnly)]
+from .permissions import *
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()
+    queryset = Product.objects.filter(is_deleted=False)
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsProductManager | IsProductOwner | ReadOnly)]
+    permission_classes = [ProductPermission]
+
+
+class PatchViewSet(viewsets.ModelViewSet):
+    queryset = Patch.objects.filter(is_deleted=False)
+    serializer_class = PatchSerializer
+    permission_classes = [PatchPermission]
+
+
+class ReleaseViewSet(viewsets.ModelViewSet):
+    queryset = Release.objects.filter(is_deleted=False)
+    serializer_class = ReleaseSerializer
+    permission_classes = [ReleasePermission]
+
 
 class ImageViewSet(viewsets.ModelViewSet):
-    queryset = Image.objects.all()
+    queryset = Image.objects.filter(is_deleted=False)
     serializer_class = ImageSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsProductOwner | ReadOnly)]
+    permission_classes = [ImagePermission]
+
 
 class SecurityIssueViewSet(viewsets.ModelViewSet):
-    queryset = SecurityIssue.objects.all()
+    queryset = SecurityIssue.objects.filter(is_deleted=False)
     serializer_class = SecurityIssueSerializer
-    permission_classes = [IsAuthenticated & (IsAdmin | IsProductOwner | ReadOnly)]
+    permission_classes = [SecurityIssuePermission]
 
 # Nested Views (GET-only for End Users and others)
 class NestedPatchListView(APIView):

@@ -1,9 +1,51 @@
 from django.contrib import admin
-from .models import Release, Patch, Product, Image, SecurityIssue
+from django.contrib.auth.admin import UserAdmin
+from django import forms
+from .models import Release, Patch, Product, Image, SecurityIssue, CustomUser
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
+from .forms import CustomUserCreationForm, CustomUserChangeForm
 
+
+# ✅ Register CustomUser properly
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from .models import CustomUser
+from .forms import CustomUserCreationForm, CustomUserChangeForm
+
+# -----------------------
+# Custom User Admin
+# -----------------------
+@admin.register(CustomUser)
+class CustomUserAdmin(UserAdmin):
+    add_form = CustomUserCreationForm
+    form = CustomUserChangeForm
+    model = CustomUser
+
+    list_display = ("email", "role", "is_staff", "has_usable_password")
+    list_filter = ("is_staff", "is_superuser", "is_active", "groups")
+    search_fields = ("email",)
+
+    def has_usable_password(self, obj):
+        return obj.has_usable_password()
+    has_usable_password.boolean = True  # Adds ✅/❌ icon in admin
+
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        ("Permissions", {"fields": ("is_staff", "is_active", "is_superuser", "groups", "user_permissions")}),
+        ("Personal info", {"fields": ("role",)}),
+    )
+
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("username", "email", "role", "password1", "password2", "is_staff", "is_active")
+        }),
+    )
+
+# ✅ No issues with rest of model registrations
 @admin.register(Release)
 class ReleaseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'release_date', 'customers', 'active')
+    list_display = ('name', 'release_date', 'active')
 
 @admin.register(Patch)
 class PatchAdmin(admin.ModelAdmin):
