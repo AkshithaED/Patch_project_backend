@@ -1,10 +1,7 @@
 from rest_framework import serializers
 from .models import (
-    HighLevelScope, Release, Patch, Product, Image,
-    SecurityIssue, ThirdPartyJar
+    Release, Patch, Product, Image, SecurityIssue,ThirdPartyJar, HighLevelScope
 )
-
-
 # ---------------------------
 # SecurityIssue Serializers
 # ---------------------------
@@ -59,15 +56,14 @@ class ImageListSerializer(serializers.ModelSerializer):
         fields = ['twistlock_report_clean']
 
 
-# ---------------------------
-# Release Serializers
-# ---------------------------
 class PatchNameOnlySerializer(serializers.ModelSerializer):
     class Meta:
         model = Patch
         fields = ['name']
 
-
+# ---------------------------
+# Release Serializers
+# ---------------------------
 class ReleaseSerializer(serializers.ModelSerializer):
     patches = PatchNameOnlySerializer(many=True, read_only=True)
 
@@ -91,26 +87,16 @@ class ReleaseListSerializer(serializers.ModelSerializer):
         return [patch.name for patch in obj.patches.filter(is_deleted=False)]
 
 
-# ---------------------------
-# ThirdPartyJar Serializer
-# ---------------------------
-class ThirdPartyJarSerializer(serializers.ModelSerializer):
-    jar_name_display = serializers.CharField(source='get_jar_name_display', read_only=True)
-
+class ProductImageMiniSerializer(serializers.ModelSerializer):
     class Meta:
-        model = ThirdPartyJar
-        fields = ['jar_name', 'jar_name_display', 'version']
+        model = Image
+        fields = ['image_name']
+
 
 
 # ---------------------------
 # Patch Serializers
 # ---------------------------
-class ProductImageMiniSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Image
-        fields = ['image_name', 'build_number', 'twistlock_report_clean', 'release_date']
-
-
 class PatchSerializer(serializers.ModelSerializer):
     related_products = serializers.SlugRelatedField(
         slug_field='name',
@@ -122,12 +108,17 @@ class PatchSerializer(serializers.ModelSerializer):
         queryset=Image.objects.filter(is_deleted=False),
         many=True
     )
-    high_level_scopes = serializers.SlugRelatedField(
-        slug_field='name',
+
+    # Using PrimaryKeyRelatedField for ManyToMany relations
+    high_level_scope = serializers.PrimaryKeyRelatedField(
         queryset=HighLevelScope.objects.all(),
         many=True
     )
-    third_party_jars = ThirdPartyJarSerializer(many=True)
+
+    third_party_jars = serializers.PrimaryKeyRelatedField(
+        queryset=ThirdPartyJar.objects.all(),
+        many=True
+    )
 
     class Meta:
         model = Patch
@@ -135,7 +126,7 @@ class PatchSerializer(serializers.ModelSerializer):
             'name', 'release', 'release_date', 'kick_off', 'code_freeze',
             'platform_qa_build', 'client_build_availability', 'description',
             'patch_version', 'patch_state', 'related_products',
-            'product_images', 'high_level_scopes', 'third_party_jars',
+            'product_images', 'high_level_scope', 'third_party_jars',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -157,35 +148,30 @@ class PatchSerializer(serializers.ModelSerializer):
         return rep
 
     def create(self, validated_data):
-        prods = validated_data.pop('related_products', [])
-        imgs = validated_data.pop('product_images', [])
-        high_level_scopes = validated_data.pop('high_level_scopes', [])
+        related_products = validated_data.pop('related_products', [])
+        product_images = validated_data.pop('product_images', [])
+        high_level_scope = validated_data.pop('high_level_scope', [])
         third_party_jars = validated_data.pop('third_party_jars', [])
 
         patch = Patch.objects.create(**validated_data)
-        patch.related_products.set(prods)
-        patch.product_images.set(imgs)
-        patch.high_level_scopes.set(high_level_scopes)
-
-        for jar_data in third_party_jars:
-            ThirdPartyJar.objects.create(patch=patch, **jar_data)
+        patch.related_products.set(related_products)
+        patch.product_images.set(product_images)
+        patch.high_level_scope.set(high_level_scope)  # Ensure it's set correctly
+        patch.third_party_jars.set(third_party_jars)  # Ensure it's set correctly
 
         return patch
 
     def update(self, instance, validated_data):
-        prods = validated_data.pop('related_products', [])
-        imgs = validated_data.pop('product_images', [])
-        high_level_scopes = validated_data.pop('high_level_scopes', [])
+        related_products = validated_data.pop('related_products', [])
+        product_images = validated_data.pop('product_images', [])
+        high_level_scope = validated_data.pop('high_level_scope', [])
         third_party_jars = validated_data.pop('third_party_jars', [])
 
         instance = super().update(instance, validated_data)
-        instance.related_products.set(prods)
-        instance.product_images.set(imgs)
-        instance.high_level_scopes.set(high_level_scopes)
-
-        instance.third_party_jars.all().delete()
-        for jar_data in third_party_jars:
-            ThirdPartyJar.objects.create(patch=instance, **jar_data)
+        instance.related_products.set(related_products)
+        instance.product_images.set(product_images)
+        instance.high_level_scope.set(high_level_scope)  # Ensure it's updated
+        instance.third_party_jars.set(third_party_jars)  # Ensure it's updated
 
         return instance
 
@@ -217,7 +203,8 @@ class ProductSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_at', 'updated_at']
 
     def get_patches(self, obj):
-        return [patch.name for patch in obj.patches_set.filter(is_deleted=False)]
+     return [patch.name for patch in obj.patches.filter(is_deleted=False)]
+
 
 
 class ProductListSerializer(serializers.ModelSerializer):

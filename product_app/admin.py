@@ -43,8 +43,11 @@ class ReleaseAdmin(admin.ModelAdmin):
 
 @admin.register(Patch)
 class PatchAdmin(admin.ModelAdmin):
-    form = PatchAdminForm  # Use the custom form here
+    form = PatchAdminForm
     list_display = ('name', 'release', 'patch_version')
+    filter_horizontal = ('high_level_scope', 'third_party_jars')
+
+    
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
