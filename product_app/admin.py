@@ -1,16 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from django import forms
 from .models import Release, Patch, Product, Image, SecurityIssue, CustomUser
-from django.contrib.auth.forms import UserCreationForm, UserChangeForm
-from .forms import CustomUserCreationForm, CustomUserChangeForm
-
-
-# ✅ Register CustomUser properly
-from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser
-from .forms import CustomUserCreationForm, CustomUserChangeForm
+from .forms import CustomUserCreationForm, CustomUserChangeForm, PatchAdminForm
 
 # -----------------------
 # Custom User Admin
@@ -42,13 +33,17 @@ class CustomUserAdmin(UserAdmin):
         }),
     )
 
-# ✅ No issues with rest of model registrations
+# -----------------------
+# Model Registrations
+# -----------------------
+
 @admin.register(Release)
 class ReleaseAdmin(admin.ModelAdmin):
     list_display = ('name', 'release_date', 'active')
 
 @admin.register(Patch)
 class PatchAdmin(admin.ModelAdmin):
+    form = PatchAdminForm  # Use the custom form here
     list_display = ('name', 'release', 'patch_version')
 
 @admin.register(Product)
