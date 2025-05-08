@@ -141,7 +141,7 @@ class Patch(models.Model):
     patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new')
     related_products = models.ManyToManyField(Product, related_name='patches')
     product_images = models.ManyToManyField('Image', related_name='patches')
-    third_party_jars = models.ManyToManyField(ThirdPartyJar, related_name='patches', blank=True)
+    third_party_jars = models.ManyToManyField(ThirdPartyJar,choices=PATCH_STATE_CHOICES, related_name='patches', blank=True)
     high_level_scope = models.ManyToManyField(HighLevelScope, related_name='patches', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
