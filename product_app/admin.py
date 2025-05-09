@@ -59,4 +59,4 @@ class ImageAdmin(admin.ModelAdmin):
 
 @admin.register(SecurityIssue)
 class SecurityIssueAdmin(admin.ModelAdmin):
-    list_display = ('cve_id', 'cvss_score', 'severity', 'image')
+    list_display = ('cve_id', 'cvss_score', 'severity', 'image_name')

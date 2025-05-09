@@ -6,18 +6,46 @@ from .models import (
 # SecurityIssue Serializers
 # ---------------------------
 class SecurityIssueSerializer(serializers.ModelSerializer):
-    image = serializers.PrimaryKeyRelatedField(
-        queryset=Image.objects.filter(twistlock_report_clean=False, is_deleted=False)
+    image_name = serializers.ChoiceField(
+        choices=[],
+        write_only=True
+    )
+    image = serializers.CharField(
+        source='image_name.image_name',
+        read_only=True
     )
 
     class Meta:
         model = SecurityIssue
         fields = [
-            'image', 'cve_id', 'cvss_score', 'severity', 'affected_libraries',
-            'library_path', 'description', 'created_at', 'updated_at'
+            'image_name',         
+            'image',  
+            'cve_id',
+            'cvss_score',
+            'severity',
+            'affected_libraries',
+            'library_path',
+            'description',
+            'created_at',
+            'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Dynamically populate dropdown with available image names
+        self.fields['image_name'].choices = [
+            (img.image_name, f"{img.product.name} - Build {img.build_number}")
+            for img in Image.objects.filter(is_deleted=False, twistlock_report_clean=False)
+        ]
+
+    def create(self, validated_data):
+        image_name_str = validated_data.pop('image_name')
+        try:
+            image = Image.objects.get(image_name=image_name_str, is_deleted=False, twistlock_report_clean=False)
+        except Image.DoesNotExist:
+            raise serializers.ValidationError({'image_name': 'Invalid or unavailable image name.'})
+        return SecurityIssue.objects.create(image_name=image, **validated_data)
 
 class SecurityIssueNestedSerializer(serializers.ModelSerializer):
     class Meta:

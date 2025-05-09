@@ -64,9 +64,9 @@ class Product(models.Model):
         return self.name
     
 
-# -----------------------
+# -------------------------------------------
 # Third Party Jar Model (as a choice list)
-# -----------------------
+# --------------------------------------------
 class ThirdPartyJar(models.Model):
     name = models.CharField(max_length=255, choices=[
         ("commons-cli", "commons-cli"),
@@ -104,9 +104,9 @@ class ThirdPartyJar(models.Model):
     def __str__(self):
         return self.name
 
-# -----------------------
+# ---------------------------------------------
 # High Level Scope Model (as a choice list)
-# -----------------------
+# ---------------------------------------------
 class HighLevelScope(models.Model):
     name = models.CharField(max_length=255, choices=[
         ('alpine', 'Alpine Linux Base Image'),
@@ -158,7 +158,7 @@ class Patch(models.Model):
 # Security Issue Model
 # -----------------------
 class SecurityIssue(models.Model):
-    image = models.ForeignKey('Image', related_name='security_issues_set', on_delete=models.CASCADE)
+    image_name = models.ForeignKey('Image', related_name='security_issues_set', on_delete=models.CASCADE)
     cve_id = models.CharField(max_length=255, default=defaults['security_issue']['cve_id'])
     cvss_score = models.FloatField(default=defaults['security_issue']['cvss_score'])
     severity = models.CharField(max_length=50, choices=[('Critical', 'Critical'), ('High', 'High'), ('Medium', 'Medium')], default=defaults['security_issue']['severity'])
