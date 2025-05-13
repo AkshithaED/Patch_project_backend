@@ -177,7 +177,7 @@ class SoftDeletePatchView(APIView):
     def delete(self, request, pk):
         try:
             patch = Patch.objects.get(name=pk)
-            patch.soft_delete()
+            patch.delete()
             return Response({"detail": "Patch deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
         except Patch.DoesNotExist:
             return Response({"detail": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
