@@ -62,7 +62,7 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
- # ------------------------------------------- 
+# ------------------------------------------- 
 # Third Party Jar Model (editable version + remarks)
 # --------------------------------------------
 class ThirdPartyJar(models.Model):
@@ -99,7 +99,7 @@ class ThirdPartyJar(models.Model):
         ("spring-boot-parent", "spring-boot-starter-parent"),
     ]
     name = models.CharField(max_length=255, choices=JAR_CHOICES)
-
+    
     def __str__(self):
         return self.name
 
@@ -134,6 +134,12 @@ class PatchThirdPartyJar(models.Model):
     class Meta:
         unique_together = ('patch', 'jar')
 
+    def clean(self):
+        if self.version:
+            self.version = ', '.join(dict.fromkeys([v.strip() for v in self.version.split(',') if v.strip()]))
+        if self.remarks:
+            self.remarks = ', '.join(dict.fromkeys([r.strip() for r in self.remarks.split(',') if r.strip()]))
+
 # ---------------------------------------------
 # PatchHighLevelScope Model (many-to-many through model)
 # ---------------------------------------------
@@ -145,6 +151,9 @@ class PatchHighLevelScope(models.Model):
     class Meta:
         unique_together = ('patch', 'scope')
 
+    def clean(self):
+        if self.version:
+            self.version = ', '.join(dict.fromkeys([v.strip() for v in self.version.split(',') if v.strip()]))
 # ---------------------------------------------
 # Patch Model (many-to-many relationships + soft delete)
 # ---------------------------------------------

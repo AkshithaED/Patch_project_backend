@@ -25,59 +25,66 @@ class ReleaseViewSet(viewsets.ModelViewSet):
     serializer_class = ReleaseSerializer
     permission_classes = [ReleasePermission]
  
-
 class PatchViewSet(viewsets.ModelViewSet):
     queryset = Patch.objects.all()
     serializer_class = PatchSerializer
     permission_classes = [PatchPermission]
-    
+    lookup_field = 'name'
 
-def create(self, request, *args, **kwargs):
-    # Serialize the incoming data
-    serializer = self.get_serializer(data=request.data)
-    if serializer.is_valid():
-        # Create the patch instance
-        patch = serializer.save()
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            patch = serializer.save()
 
-        # Get the list of related products and images from request data
-        related_products = request.data.get('related_products', [])
-        product_images = request.data.get('product_images', [])
+            related_products = request.data.get('related_products', [])
+            product_images = request.data.get('product_images', [])
 
-        # Associate products with the patch (Many-to-Many relation)
-        for product_id in related_products:
-            product = Product.objects.get(name=product_id)  # Use 'name' instead of 'id'
-            patch.related_products.add(product)
+            for product_name in related_products:
+                product = Product.objects.get(name=product_name)
+                patch.related_products.add(product)
 
-        # Associate images with each product (Many-to-Many relation)
-        for image_id in product_images:
-            image = Image.objects.get(image_name=image_id)  # Ensure image exists
-            # Iterate through the related products and add the image to each product
-            for product in patch.related_products.all():
-                product.images.add(image)  # Add the image to the product's image set
+            for image_name in product_images:
+                image = Image.objects.get(image_name=image_name)
+                for product in patch.related_products.all():
+                    product.images.add(image)
 
-        # Return a response indicating the patch has been created and related data has been updated
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # If serializer data is not valid, return errors
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-    # Override destroy method to perform hard delete (remove from DB permanently)
-    def destroy(self, request, *args, **kwargs):
-        # Get the patch to be deleted
+    def update(self, request, *args, **kwargs):
         patch = self.get_object()
+        serializer = self.get_serializer(patch, data=request.data, partial=True)  # partial=True allows partial updates
+        if serializer.is_valid():
+            patch = serializer.save()
 
-        # Optionally, clear relationships before deleting (like disassociating products)
+            # Update related products if provided
+            related_products = request.data.get('related_products')
+            if related_products is not None:
+                patch.related_products.clear()
+                for product_name in related_products:
+                    product = Product.objects.get(name=product_name)
+                    patch.related_products.add(product)
+
+            # Update product images if provided
+            product_images = request.data.get('product_images')
+            if product_images is not None:
+                patch.product_images.clear()
+                for image_name in product_images:
+                    image = Image.objects.get(image_name=image_name)
+                    patch.product_images.add(image)
+
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        patch = self.get_object()
         patch.related_products.clear()
-
-        # # Perform hard delete (permanent removal from DB)
-        # patch.delete()
-
-        # Return response confirming the patch has been deleted
+        patch.delete()
         return Response(
             {"detail": "Patch deleted permanently."},
             status=status.HTTP_204_NO_CONTENT
         )
+
 
  
 class ProductViewSet(viewsets.ModelViewSet):
@@ -182,3 +189,62 @@ class SoftDeletePatchView(APIView):
         except Patch.DoesNotExist:
             return Response({"detail": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
 
+
+class UpdatePatchView(APIView):
+    permission_classes = [PatchPermission]
+
+    def put(self, request, pk):
+        try:
+            patch = Patch.objects.get(name=pk)
+        except Patch.DoesNotExist:
+            return Response({"detail": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatchSerializer(patch, data=request.data, partial=False)
+        if serializer.is_valid():
+            patch = serializer.save()
+
+            # Update related products if provided
+            related_products = request.data.get('related_products')
+            if related_products is not None:
+                patch.related_products.clear()
+                for product_name in related_products:
+                    product = Product.objects.get(name=product_name)
+                    patch.related_products.add(product)
+
+            # Update product images if provided
+            product_images = request.data.get('product_images')
+            if product_images is not None:
+                patch.product_images.clear()
+                for image_name in product_images:
+                    image = Image.objects.get(image_name=image_name)
+                    patch.product_images.add(image)
+
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        try:
+            patch = Patch.objects.get(name=pk)
+        except Patch.DoesNotExist:
+            return Response({"detail": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = PatchSerializer(patch, data=request.data, partial=True)
+        if serializer.is_valid():
+            patch = serializer.save()
+
+            related_products = request.data.get('related_products')
+            if related_products is not None:
+                patch.related_products.clear()
+                for product_name in related_products:
+                    product = Product.objects.get(name=product_name)
+                    patch.related_products.add(product)
+
+            product_images = request.data.get('product_images')
+            if product_images is not None:
+                patch.product_images.clear()
+                for image_name in product_images:
+                    image = Image.objects.get(image_name=image_name)
+                    patch.product_images.add(image)
+
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
