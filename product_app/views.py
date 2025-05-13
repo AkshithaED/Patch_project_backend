@@ -11,7 +11,7 @@ from .serializers import (
     ImageSerializer, SecurityIssueSerializer
 )
 from .permissions import *
- 
+
 from django.conf import settings
 
 default_patch_data = settings.DEFAULTS['patch']
@@ -172,8 +172,13 @@ def create_image(request):
  
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
  
- 
-#------------------------------------------------------------
-# create a view to create an image from the url
-#----------------------------------------------------------
- 
+
+class SoftDeletePatchView(APIView):
+    def delete(self, request, pk):
+        try:
+            patch = Patch.objects.get(name=pk)
+            patch.soft_delete()
+            return Response({"detail": "Patch deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        except Patch.DoesNotExist:
+            return Response({"detail": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+

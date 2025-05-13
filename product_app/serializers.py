@@ -2,6 +2,8 @@ from rest_framework import serializers
 from .models import (
     Release, Patch, Product, Image, SecurityIssue,ThirdPartyJar, HighLevelScope
 )
+from django.core.exceptions import ObjectDoesNotExist
+
 # ---------------------------
 # SecurityIssue Serializers
 # ---------------------------
@@ -122,9 +124,49 @@ class ProductImageMiniSerializer(serializers.ModelSerializer):
 
 
 
-# ---------------------------
-# Patch Serializers
-# ---------------------------
+from rest_framework import serializers
+from .models import (
+    Release, Patch, Product, Image, SecurityIssue, ThirdPartyJar, HighLevelScope,
+    PatchThirdPartyJar, PatchHighLevelScope
+)
+# Third Party Jar Serializer
+class ThirdPartyJarSerializer(serializers.ModelSerializer):
+    version = serializers.CharField()
+    remarks = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = ThirdPartyJar
+        fields = ['name', 'version', 'remarks']
+
+
+# High Level Scope Serializer
+class HighLevelScopeSerializer(serializers.ModelSerializer):
+    version = serializers.CharField()
+
+    class Meta:
+        model = HighLevelScope
+        fields = ['name', 'version']
+
+# serializers.py
+
+class PatchHighLevelScopeSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='scope.name')
+
+    class Meta:
+        model = PatchHighLevelScope
+        fields = ['name', 'version']
+
+
+class PatchThirdPartyJarSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source='jar.name')
+    remarks = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = PatchThirdPartyJar
+        fields = ['name', 'version', 'remarks']
+  
+
+# Patch Serializer
 class PatchSerializer(serializers.ModelSerializer):
     related_products = serializers.SlugRelatedField(
         slug_field='name',
@@ -136,17 +178,14 @@ class PatchSerializer(serializers.ModelSerializer):
         queryset=Image.objects.filter(is_deleted=False),
         many=True
     )
+    
+    # These are used for reading
+    high_level_scope = serializers.SerializerMethodField()
+    third_party_jars = serializers.SerializerMethodField()
 
-    # Using PrimaryKeyRelatedField for ManyToMany relations
-    high_level_scope = serializers.PrimaryKeyRelatedField(
-        queryset=HighLevelScope.objects.all(),
-        many=True
-    )
-
-    third_party_jars = serializers.PrimaryKeyRelatedField(
-        queryset=ThirdPartyJar.objects.all(),
-        many=True
-    )
+    # These are used for writing
+    high_level_scope_input = HighLevelScopeSerializer(many=True, write_only=True)
+    third_party_jars_input = ThirdPartyJarSerializer(many=True, write_only=True)
 
     class Meta:
         model = Patch
@@ -154,52 +193,78 @@ class PatchSerializer(serializers.ModelSerializer):
             'name', 'release', 'release_date', 'kick_off', 'code_freeze',
             'platform_qa_build', 'client_build_availability', 'description',
             'patch_version', 'patch_state', 'related_products',
-            'product_images', 'high_level_scope', 'third_party_jars',
+            'product_images',
+            'high_level_scope',         # For GET
+            'high_level_scope_input',   # For POST/PUT
+            'third_party_jars',         # For GET
+            'third_party_jars_input',   # For POST/PUT
             'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
-    def to_representation(self, instance):
-        rep = super().to_representation(instance)
-        products = instance.related_products.filter(is_deleted=False)
-        nested_products = []
+    def get_high_level_scope(self, obj):
+        items = PatchHighLevelScope.objects.filter(patch=obj)
+        return PatchHighLevelScopeSerializer(items, many=True).data
 
-        for product in products:
-            images = instance.product_images.filter(product=product, is_deleted=False)
-            nested_products.append({
-                "name": product.name,
-                "product_images": ProductImageMiniSerializer(images, many=True).data
-            })
-
-        rep['related_products'] = nested_products
-        rep.pop('product_images', None)
-        return rep
+    def get_third_party_jars(self, obj):
+        items = PatchThirdPartyJar.objects.filter(patch=obj)
+        return PatchThirdPartyJarSerializer(items, many=True).data
 
     def create(self, validated_data):
         related_products = validated_data.pop('related_products', [])
         product_images = validated_data.pop('product_images', [])
-        high_level_scope = validated_data.pop('high_level_scope', [])
-        third_party_jars = validated_data.pop('third_party_jars', [])
+        high_level_scope_data = validated_data.pop('high_level_scope_input', [])
+        third_party_jars_data = validated_data.pop('third_party_jars_input', [])
 
         patch = Patch.objects.create(**validated_data)
         patch.related_products.set(related_products)
         patch.product_images.set(product_images)
-        patch.high_level_scope.set(high_level_scope)  # Ensure it's set correctly
-        patch.third_party_jars.set(third_party_jars)  # Ensure it's set correctly
+
+        for scope_data in high_level_scope_data:
+            try:
+                scope = HighLevelScope.objects.get(name=scope_data['name'])
+            except ObjectDoesNotExist:
+                raise serializers.ValidationError(f"HighLevelScope '{scope_data['name']}' does not exist.")
+            PatchHighLevelScope.objects.create(patch=patch, scope=scope, version=scope_data['version'])
+
+        for jar_data in third_party_jars_data:
+            try:
+                jar = ThirdPartyJar.objects.get(name=jar_data['name'])
+            except ObjectDoesNotExist:
+                raise serializers.ValidationError(f"ThirdPartyJar '{jar_data['name']}' does not exist.")
+            PatchThirdPartyJar.objects.create(
+                patch=patch, jar=jar,
+                version=jar_data['version'],
+                remarks=jar_data.get('remarks', '')
+            )
 
         return patch
 
     def update(self, instance, validated_data):
         related_products = validated_data.pop('related_products', [])
         product_images = validated_data.pop('product_images', [])
-        high_level_scope = validated_data.pop('high_level_scope', [])
-        third_party_jars = validated_data.pop('third_party_jars', [])
+        high_level_scope_data = validated_data.pop('high_level_scope_input', [])
+        third_party_jars_data = validated_data.pop('third_party_jars_input', [])
 
         instance = super().update(instance, validated_data)
         instance.related_products.set(related_products)
         instance.product_images.set(product_images)
-        instance.high_level_scope.set(high_level_scope)  # Ensure it's updated
-        instance.third_party_jars.set(third_party_jars)  # Ensure it's updated
+
+        # Clear and reassign many-to-many through models
+        PatchHighLevelScope.objects.filter(patch=instance).delete()
+        PatchThirdPartyJar.objects.filter(patch=instance).delete()
+
+        for scope_data in high_level_scope_data:
+            scope = HighLevelScope.objects.get(name=scope_data['name'])
+            PatchHighLevelScope.objects.create(patch=instance, scope=scope, version=scope_data['version'])
+
+        for jar_data in third_party_jars_data:
+            jar = ThirdPartyJar.objects.get(name=jar_data['name'])
+            PatchThirdPartyJar.objects.create(
+                patch=instance, jar=jar,
+                version=jar_data['version'],
+                remarks=jar_data.get('remarks', '')
+            )
 
         return instance
 
@@ -213,7 +278,6 @@ class PatchListSerializer(serializers.ModelSerializer):
 
     def get_related_products(self, obj):
         return [product.name for product in obj.related_products.filter(is_deleted=False)]
-
 
 # ---------------------------
 # Product Serializers

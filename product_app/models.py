@@ -62,13 +62,11 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
-    
-
-# -------------------------------------------
-# Third Party Jar Model (as a choice list)
+ # ------------------------------------------- 
+# Third Party Jar Model (editable version + remarks)
 # --------------------------------------------
 class ThirdPartyJar(models.Model):
-    name = models.CharField(max_length=255, choices=[
+    JAR_CHOICES = [
         ("commons-cli", "commons-cli"),
         ("commons-codec", "commons-codec"),
         ("commons-io", "commons-io"),
@@ -99,16 +97,17 @@ class ThirdPartyJar(models.Model):
         ("logback-classic", "logback-classic"),
         ("jakarta-mail-api", "Jakarta.mail-api"),
         ("spring-boot-parent", "spring-boot-starter-parent"),
-    ])
-    
+    ]
+    name = models.CharField(max_length=255, choices=JAR_CHOICES)
+
     def __str__(self):
         return self.name
 
 # ---------------------------------------------
-# High Level Scope Model (as a choice list)
+# High Level Scope Model (editable version)
 # ---------------------------------------------
 class HighLevelScope(models.Model):
-    name = models.CharField(max_length=255, choices=[
+    SCOPE_CHOICES = [
         ('alpine', 'Alpine Linux Base Image'),
         ('base_os', 'Base OS'),
         ('tomcat', 'Tomcat'),
@@ -116,11 +115,39 @@ class HighLevelScope(models.Model):
         ('otds', 'OTDS'),
         ('otiv', 'OTIV'),
         ('new_relic', 'New Relic'),
-    ])
-    
+    ]
+
+    name = models.CharField(max_length=255, choices=SCOPE_CHOICES)
+
     def __str__(self):
         return self.name
 
+# ---------------------------------------------
+# PatchThirdPartyJar Model (many-to-many through model)
+# ---------------------------------------------
+class PatchThirdPartyJar(models.Model):
+    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+    jar = models.ForeignKey(ThirdPartyJar, on_delete=models.CASCADE)
+    version = models.CharField(max_length=100)
+    remarks = models.TextField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ('patch', 'jar')
+
+# ---------------------------------------------
+# PatchHighLevelScope Model (many-to-many through model)
+# ---------------------------------------------
+class PatchHighLevelScope(models.Model):
+    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+    scope = models.ForeignKey(HighLevelScope, on_delete=models.CASCADE)
+    version = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ('patch', 'scope')
+
+# ---------------------------------------------
+# Patch Model (many-to-many relationships + soft delete)
+# ---------------------------------------------
 class Patch(models.Model):
     PATCH_STATE_CHOICES = [
         ('new', 'New'),
@@ -139,10 +166,23 @@ class Patch(models.Model):
     description = models.TextField()
     patch_version = models.CharField(max_length=50)
     patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new')
-    related_products = models.ManyToManyField(Product, related_name='patches')
-    product_images = models.ManyToManyField('Image', related_name='patches')
-    third_party_jars = models.ManyToManyField(ThirdPartyJar,choices=PATCH_STATE_CHOICES, related_name='patches', blank=True)
-    high_level_scope = models.ManyToManyField(HighLevelScope, related_name='patches', blank=True)
+    
+    related_products = models.ManyToManyField(Product, related_name='patches', blank=True)
+    product_images = models.ManyToManyField('Image', related_name='patches', blank=True)
+
+    third_party_jars = models.ManyToManyField(
+        ThirdPartyJar,
+        through='PatchThirdPartyJar',
+        related_name='patches',
+        blank=True
+    )
+    high_level_scope = models.ManyToManyField(
+        HighLevelScope,
+        through='PatchHighLevelScope',
+        related_name='patches',
+        blank=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
@@ -184,7 +224,7 @@ class Image(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
     image_name = models.CharField(default=defaults['image']['image_name'], max_length=255)
     build_number = models.CharField(max_length=100, default=defaults['image']['build_number'])
-    release_date = models.DateTimeField(default=defaults['image']['release_date'])
+    release_date = models.DateField(default=defaults['release']['release_date'])
     ot2_pass = models.CharField(max_length=3, choices=[('Yes', 'Yes'), ('No', 'No')], default='No')
     twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'])
     security_issues = models.ManyToManyField(SecurityIssue, related_name='images', blank=True)
