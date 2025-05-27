@@ -5,7 +5,7 @@ from django.utils import timezone
 from .models import (
     CustomUser, Release, Patch, Product,
     Image, SecurityIssue, Jar, HighLevelScope,
-    PatchProductImage
+    PatchProductImage, PatchHighLevelScope, PatchJar
 )
 from .forms import CustomUserCreationForm, CustomUserChangeForm, PatchAdminForm
 
@@ -16,16 +16,28 @@ from .forms import CustomUserCreationForm, CustomUserChangeForm, PatchAdminForm
 class SecurityIssueImageInline(admin.TabularInline):
     model = Image.security_issues.through
     extra = 1
-    raw_id_fields = ('image',)
+    # raw_id_fields = ('image',)
+    raw_id_fields = ('securityissue',)   
+    fields = ('securityissue',)
 
+# class PatchThirdPartyJarInline(admin.TabularInline):
+#     model = Patch.third_party_jars.through
+#     extra = 1
 class PatchThirdPartyJarInline(admin.TabularInline):
-    model = Patch.third_party_jars.through
+    model = PatchJar
     extra = 1
+    raw_id_fields = ('jar',)        # gives you the Jar lookup widget
+    fields         = ('jar', 'remarks')
+
+# class PatchHighLevelScopeInline(admin.TabularInline):
+#     model = Patch.high_level_scope.through
+#     extra = 1
 
 class PatchHighLevelScopeInline(admin.TabularInline):
-    model = Patch.high_level_scope.through
+    model = PatchHighLevelScope
     extra = 1
-
+    raw_id_fields = ('scope',)      # gives you the Scope lookup widget
+    fields         = ('scope', 'remarks')
 # -----------------------
 # Custom User Admin
 # -----------------------
@@ -147,12 +159,12 @@ class SecurityIssueAdmin(admin.ModelAdmin):
 # -----------------------
 @admin.register(Jar)
 class JarAdmin(admin.ModelAdmin):
-    list_display = ('name', 'current_version')
+    list_display = ('name', 'version')
     search_fields = ('name',)
 
 @admin.register(HighLevelScope)
 class HighLevelScopeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'current_version')
+    list_display = ('name', 'version')
     search_fields = ('name',)
 
 @admin.register(PatchProductImage)

@@ -83,8 +83,8 @@ class Product(models.Model):
 # Jar Model
 # -----------------------
 class Jar(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    current_version = models.CharField(max_length=100, blank=True, null=True)
+    name = models.CharField(primary_key = True,max_length=255)
+    version = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -94,8 +94,8 @@ class Jar(models.Model):
 # HighLevelScope Model
 # -----------------------
 class HighLevelScope(models.Model):
-    name = models.CharField(max_length=255, unique=True)
-    current_version = models.CharField(max_length=100, blank=True, null=True)
+    name = models.CharField(primary_key=True, max_length=255)
+    version = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -104,7 +104,7 @@ class HighLevelScope(models.Model):
 # Security Issue Model
 # -----------------------
 class SecurityIssue(models.Model):
-    cve_id = models.CharField(unique = True,max_length=255, default=defaults['security_issue']['cve_id'])
+    cve_id = models.CharField(primary_key = True,max_length=255, default=defaults['security_issue']['cve_id'])
     cvss_score = models.FloatField(default=defaults['security_issue']['cvss_score'])
     severity = models.CharField(max_length=50, choices=[('Critical', 'Critical'), ('High', 'High'), ('Medium', 'Medium')], default=defaults['security_issue']['severity'])
     affected_libraries = models.TextField(default=defaults['security_issue']['affected_libraries'])
@@ -158,8 +158,30 @@ class Image(models.Model):
 
     def __str__(self):
         return f"Image for {self.product.name} - Build {self.build_number}"
-        
 
+# -----------------------
+# PatchJar Model
+# -----------------------       
+class PatchJar(models.Model):
+    patch   = models.ForeignKey('Patch', on_delete=models.CASCADE)
+    jar     = models.ForeignKey('Jar',   on_delete=models.CASCADE)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('patch', 'jar')
+
+# -----------------------
+# PatchHighLevelScope Model
+# -----------------------  
+class PatchHighLevelScope(models.Model):
+    patch   = models.ForeignKey('Patch', on_delete=models.CASCADE)
+    scope   = models.ForeignKey('HighLevelScope', on_delete=models.CASCADE)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('patch', 'scope')
 # -----------------------
 # Patch Model
 # -----------------------
@@ -191,8 +213,18 @@ class Patch(models.Model):
          through='PatchProductImage', 
         related_name='patches'
     )
-    third_party_jars = models.ManyToManyField(Jar, related_name='patches', blank=True)
-    high_level_scope = models.ManyToManyField(HighLevelScope, related_name='patches', blank=True)
+    # third_party_jars = models.ManyToManyField(Jar, related_name='patches', blank=True)
+    # high_level_scope = models.ManyToManyField(HighLevelScope, related_name='patches', blank=True)
+    third_party_jars = models.ManyToManyField(
+       Jar,
+       through='PatchJar',
+       related_name='patch_links'
+    )
+    high_level_scope = models.ManyToManyField(
+       HighLevelScope,
+       through='PatchHighLevelScope',
+       related_name='patch_links'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
