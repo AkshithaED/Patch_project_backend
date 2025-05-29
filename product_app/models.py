@@ -134,7 +134,6 @@ class Image(models.Model):
     image_name = models.CharField(primary_key = True,default=defaults['image']['image_name'], max_length=255)
     build_number = models.CharField(max_length=100, default=defaults['image']['build_number'])
     release_date = models.DateField(default=defaults['release']['release_date'])
-    ot2_pass = models.CharField(max_length=3, choices=[('Yes', 'Yes'), ('No', 'No')], default='No')
     twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'])
     security_issues = models.ManyToManyField(SecurityIssue, related_name='images', blank=True)
     twistlock_report_clean = models.BooleanField(default=True)
@@ -142,6 +141,10 @@ class Image(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
     # objects = SoftDeleteManager()
+
+    
+    # class Meta:
+    #     unique_together = ('image_name', 'version_name')
 
     def twistlock_status(self):
         if self.twistlock_report_clean:
@@ -182,6 +185,9 @@ class PatchHighLevelScope(models.Model):
 
     class Meta:
         unique_together = ('patch', 'scope')
+
+
+
 # -----------------------
 # Patch Model
 # -----------------------
@@ -265,3 +271,38 @@ class PatchProductImage(models.Model):
 
 
 
+# -----------------------
+# Patchimage Model
+# -----------------------
+STATUS_CHOICES = [
+    ('Released', 'Released'),
+    ('Not Released', 'Not Released'),
+    ('Applicable', 'Applicable'),
+]
+
+class PatchImage(models.Model):
+    patch = models.ForeignKey(Patch, on_delete=models.CASCADE)
+    image = models.ForeignKey(Image, on_delete=models.CASCADE)
+    
+    ot2_pass = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='Not Released',
+    )
+    registry = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='Not Released',
+        blank=True,
+        null=True,
+    )
+    helm_charts = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='Not Released',
+        blank=True,
+        null=True,
+    )
+    patch_build_number = models.CharField(max_length=50, blank=True, null=True)
+
+    # other patch-specific fields related to this image

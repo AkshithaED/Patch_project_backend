@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage
 
 class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -38,7 +38,7 @@ class ImageSerializer(serializers.ModelSerializer):
         model = Image
         fields = [
             'product', 'image_name', 'build_number', 'release_date',
-            'ot2_pass', 'twistlock_report_url', 'twistlock_report_clean',
+            'twistlock_report_url', 'twistlock_report_clean',
             'created_at', 'updated_at', 'is_deleted',
             # both of these together:
             'security_issues',     # read nested
@@ -172,6 +172,32 @@ class PatchHighLevelScopeSerializer(serializers.ModelSerializer):
 #                 'images': ImageSerializer(images, many=True).data
 #             })
 #         return out
+class PatchImageNestedSerializer(serializers.ModelSerializer):
+    image = ImageSerializer(read_only=True)
+    image_name = serializers.CharField(write_only=True) 
+    ot2_pass = serializers.CharField()
+    registry = serializers.CharField()
+    helm_charts = serializers.CharField()
+    patch_build_number = serializers.CharField()
+
+    class Meta:
+        model = PatchImage 
+        fields = [
+            'image', 
+            'image_name' ,        
+            'ot2_pass',       
+            'registry',
+            'helm_charts',
+            'patch_build_number',
+        ]
+
+
+
+
+class ProductNestedSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    images = PatchImageNestedSerializer(many=True)
+
 
 class PatchSerializer(serializers.ModelSerializer):
     # — read‐only through-model views —
@@ -189,9 +215,11 @@ class PatchSerializer(serializers.ModelSerializer):
     scopes_data   = serializers.ListField(
                         child=serializers.DictField(), write_only=True
                     )
-    products_data = serializers.ListField(
-                        child=serializers.DictField(), write_only=True
-                    )
+    # products_data = serializers.ListField(
+    #                     child=serializers.DictField(), write_only=True
+    #                 )
+    products_data = ProductNestedSerializer(many=True, write_only=True)
+
 
     # — read‐only nested output —
     products = serializers.SerializerMethodField()
@@ -226,14 +254,52 @@ class PatchSerializer(serializers.ModelSerializer):
         patch = super().create(validated_data)
 
         # 3) Link products & images
+        # for pd in products_payload:
+        #     pkg = Product.objects.get(name=pd['name'])
+        #     patch.products.add(pkg)
+        #     for img_name in pd['images']:
+        #         img = Image.objects.get(image_name=img_name, product=pkg)
+        #         PatchProductImage.objects.create(
+        #             patch=patch, product=pkg, image=img
+        #         )
         for pd in products_payload:
-            pkg = Product.objects.get(name=pd['name'])
+            try:
+                pkg = Product.objects.get(name=pd['name'])
+            except Product.DoesNotExist:
+                raise serializers.ValidationError(f"Product '{pd['name']}' not found.")
+
             patch.products.add(pkg)
-            for img_name in pd['images']:
-                img = Image.objects.get(image_name=img_name, product=pkg)
-                PatchProductImage.objects.create(
-                    patch=patch, product=pkg, image=img
+
+            for img_dict in pd['images']:
+                img_name = img_dict.get('image_name')
+                try:
+                    img = Image.objects.get(image_name=img_name, product=pkg)
+                except Image.DoesNotExist:
+                    raise serializers.ValidationError(
+                        f"Image '{img_name}' for product '{pkg.name}' not found."
+                    )
+
+                # Create PatchProductImage (basic linking)
+                PatchProductImage.objects.get_or_create(
+                    patch=patch,
+                    product=pkg,
+                    image=img
                 )
+
+                # Create or update PatchImage with extra patch-specific fields
+                PatchImage.objects.update_or_create(
+                    patch=patch,
+                    image=img,
+                    defaults={
+                        'ot2_pass': img_dict.get('ot2_pass'),
+                        'registry': img_dict.get('registry'),
+                        'helm_charts': img_dict.get('helm_charts'),
+                        'patch_build_number': img_dict.get('patch_build_number'),
+                    }
+                )
+
+
+
 
         # 4) Link jars + remarks
         # for jd in jars_payload:
@@ -285,16 +351,45 @@ class PatchSerializer(serializers.ModelSerializer):
 
         # 3) If products_data sent, clear & re-create
         if products_payload is not None:
-            PatchProductImage.objects.filter(patch=patch).delete()
             patch.products.clear()
+
             for pd in products_payload:
                 pkg = Product.objects.get(name=pd['name'])
                 patch.products.add(pkg)
-                for img_name in pd['images']:
-                    img = Image.objects.get(image_name=img_name, product=pkg)
-                    PatchProductImage.objects.create(
-                        patch=patch, product=pkg, image=img
+
+                for img_dict in pd['images']:
+                    img_name = img_dict.get('image_name')
+                    if not img_name:
+                        raise serializers.ValidationError(f"Missing or empty 'image_name' for product '{pd['name']}'")
+
+                    # ✅ Now img is only set if img_name is valid
+                    try:
+                        img = Image.objects.get(image_name=img_name, product=pkg)
+                    except Image.DoesNotExist:
+                        raise serializers.ValidationError(f"Image '{img_name}' for product '{pd['name']}' not found.")
+
+                    # Link product image to patch
+                    PatchProductImage.objects.update_or_create(
+                        patch=patch,
+                        product=pkg,
+                        image=img
                     )
+
+                    # Create or update PatchImage with the provided metadata
+                    PatchImage.objects.update_or_create(
+                        patch=patch,
+                        image=img,
+                        defaults={
+                            'ot2_pass': img_dict.get('ot2_pass'),
+                            'registry': img_dict.get('registry'),
+                            'helm_charts': img_dict.get('helm_charts'),
+                            'patch_build_number': img_dict.get('patch_build_number'),
+                        }
+                    )
+
+
+
+
 
         if jars_payload is not None:
             # simply update_or_create each row; no need to clear
@@ -341,18 +436,36 @@ class PatchSerializer(serializers.ModelSerializer):
         return patch
 
     def get_products(self, obj):
-        """
-        Build the nested products → images structure for reads.
-        """
-        out = []
-        for pkg in obj.products.filter(is_deleted=False):
+        products_list = []
+        for product in obj.products.filter(is_deleted=False):
             imgs = Image.objects.filter(
-                product=pkg,
+                product=product,
                 patchproductimage__patch=obj,
                 is_deleted=False
-            )
-            out.append({
-                'name': pkg.name,
-                'images': ImageSerializer(imgs, many=True).data
+            ).distinct()
+
+            images_data = []
+            for img in imgs:
+                # Serialize basic image data
+                image_serialized = ImageSerializer(img).data
+
+                # Attach patch-specific fields from PatchImage
+                try:
+                    patch_image = PatchImage.objects.get(patch=obj, image=img)
+                    image_serialized.update({
+                        "ot2_pass": patch_image.ot2_pass,
+                        "registry": patch_image.registry,
+                        "helm_charts": patch_image.helm_charts,
+                        "patch_build_number": patch_image.patch_build_number,
+                    })
+                except PatchImage.DoesNotExist:
+                    pass  # Or handle accordingly if required
+
+                images_data.append(image_serialized)
+
+            products_list.append({
+                "name": product.name,
+                "images": images_data,
             })
-        return out
+
+        return products_list
