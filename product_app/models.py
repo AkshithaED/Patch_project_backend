@@ -306,3 +306,8 @@ class PatchImage(models.Model):
     patch_build_number = models.CharField(max_length=50, blank=True, null=True)
 
     # other patch-specific fields related to this image
+
+
+# class ProductSecurityIssues(models.Model):
+
+#        description_product = models.TextField(default="specific product Security issue description", blank=True, null=True)
