@@ -21,6 +21,30 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = SecurityIssue
         fields = '__all__'
+class SecurityIssueWithProductDescriptionSerializer(serializers.ModelSerializer):
+    product_security_des = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SecurityIssue
+        fields = [
+            'cve_id',
+            'cvss_score',
+            'severity',
+            'affected_libraries',
+            'library_path',
+            'description',
+            'product_security_des',
+            'created_at',
+            'updated_at',
+            'is_deleted'
+        ]
+
+    def get_product_security_des(self, obj):
+        product = self.context.get('product')
+        if not product:
+            return None
+        link = ProductSecurityIssue.objects.filter(product=product, security_issue=obj).first()
+        return link.product_security_des if link else None
 
 class ImageSerializer(serializers.ModelSerializer):
     # 1) Nested, read-only display of full SecurityIssue objects
@@ -41,8 +65,7 @@ class ImageSerializer(serializers.ModelSerializer):
             'twistlock_report_url', 'twistlock_report_clean',
             'created_at', 'updated_at', 'is_deleted',
             # both of these together:
-            'security_issues',     # read nested
-            'security_issue_ids',  # write only
+            'security_issues', 'security_issue_ids'   # read nested
         ]
 
     def create(self, validated_data):
@@ -58,6 +81,16 @@ class ImageSerializer(serializers.ModelSerializer):
         if issue_ids is not None:
             image.security_issues.set(issue_ids)
         return image
+
+    def get_security_issues(self, obj):
+        product = self.context.get('product')  # passed from outer serializer
+        security_issues = obj.security_issues.filter(is_deleted=False)
+        return SecurityIssueWithProductDescriptionSerializer(
+            security_issues,
+            many=True,
+            context={'product': product}
+        ).data
+
 
 class ProductSerializer(serializers.ModelSerializer):
     images = ImageSerializer(many=True, read_only=True)
@@ -83,95 +116,6 @@ class PatchHighLevelScopeSerializer(serializers.ModelSerializer):
         model  = PatchHighLevelScope
         fields = ('name', 'version', 'remarks')
 
-# class PatchSerializer(serializers.ModelSerializer):
-#     # third_party_jars = JarSerializer(many=True, read_only=True)
-#     # high_level_scope = HighLevelScopeSerializer(many=True, read_only=True)
-#     jars   = PatchJarSerializer(
-#                  source='patchjar_set', many=True, read_only=True
-#              )
-#     scopes = PatchHighLevelScopeSerializer(
-#                  source='patchhighlevelscope_set', many=True, read_only=True
-#              )
-
-#     jars_data   = serializers.ListField(child=serializers.DictField(), write_only=True)
-#     scopes_data = serializers.ListField(child=serializers.DictField(), write_only=True)
-#     # class Meta:
-#     #     model = Patch
-#     #     exclude = ('products', 'images')  # Don't show directly
-#     #     # fields = '__all__'
-#     # 1️⃣ write‐only: what the client POSTs/PATCHes
-#     products_data = serializers.ListField(
-#         child=serializers.DictField(), 
-#         write_only=True
-#     )
-
-#     # 2️⃣ read‐only: what you return on GET
-#     products = serializers.SerializerMethodField()
-
-#     class Meta:
-#         model   = Patch
-#         # switch from exclude to explicit so you can include products_data + products
-#         fields  = [
-#             'name', 'release', 'release_date', 'kick_off', 'code_freeze',
-#             'platform_qa_build', 'client_build_availability',
-#             'description', 'patch_state',
-#             'jars', 'scopes',      # your existing through-model read fields
-#             'products_data',       # ✍️ write-only
-#             'products',            # 👁 read-only nested
-#         ]
-#         extra_kwargs = {
-#             'products_data': {'required': True},
-#         }
-
-#     def create(self, validated_data):
-#         products_payload = validated_data.pop('products_data')
-#         patch = super().create(validated_data)
-
-#         for pd in products_payload:
-#             pkg = Product.objects.get(name=pd['name'])
-#             patch.products.add(pkg)
-#             for img in pd['images']:
-#                 img_obj = Image.objects.get(image_name=img, product=pkg)
-#                 PatchProductImage.objects.create(
-#                     patch=patch, product=pkg, image=img_obj
-#                 )
-#         return patch
-
-#     def update(self, instance, validated_data):
-#         payload = validated_data.pop('products_data', None)
-#         patch = super().update(instance, validated_data)
-
-#         if payload is not None:
-#             # clear out old links
-#             PatchProductImage.objects.filter(patch=patch).delete()
-#             patch.products.clear()
-
-#             for pd in payload:
-#                 pkg = Product.objects.get(name=pd['name'])
-#                 patch.products.add(pkg)
-#                 for img in pd['images']:
-#                     img_obj = Image.objects.get(image_name=img, product=pkg)
-#                     PatchProductImage.objects.create(
-#                         patch=patch, product=pkg, image=img_obj
-#                     )
-#         return patch
-
-#     def get_products(self, obj):
-#         """
-#         Builds the nested structure for GET / PATCH/:id
-#         """
-#         out = []
-#         for pkg in obj.products.filter(is_deleted=False):
-#             images = Image.objects.filter(
-#                 product=pkg,
-#                 patchproductimage__patch=obj,
-#                 is_deleted=False
-#             )
-#             out.append({
-#                 'name': pkg.name,
-#                 'images': ImageSerializer(images, many=True).data
-#             })
-#         return out
 class PatchImageNestedSerializer(serializers.ModelSerializer):
     image = ImageSerializer(read_only=True)
     image_name = serializers.CharField(write_only=True) 
@@ -253,15 +197,6 @@ class PatchSerializer(serializers.ModelSerializer):
         # 2) Create the Patch record
         patch = super().create(validated_data)
 
-        # 3) Link products & images
-        # for pd in products_payload:
-        #     pkg = Product.objects.get(name=pd['name'])
-        #     patch.products.add(pkg)
-        #     for img_name in pd['images']:
-        #         img = Image.objects.get(image_name=img_name, product=pkg)
-        #         PatchProductImage.objects.create(
-        #             patch=patch, product=pkg, image=img
-        #         )
         for pd in products_payload:
             try:
                 pkg = Product.objects.get(name=pd['name'])
@@ -301,18 +236,6 @@ class PatchSerializer(serializers.ModelSerializer):
 
 
 
-        # 4) Link jars + remarks
-        # for jd in jars_payload:
-        #     jar_obj, _ = Jar.objects.get_or_create(
-        #         name=jd['name'],
-        #         defaults={'version': jd.get('version')}
-        #     )
-        #     patch.third_party_jars.add(jar_obj)
-        #     PatchJar.objects.create(
-        #         patch=patch,
-        #         jar=jar_obj,
-        #         remarks=jd.get('remarks', '')
-        #     )
         for jd in jars_payload:
             jar_obj, _ = Jar.objects.get_or_create(
                 name=jd['name'],
@@ -437,6 +360,7 @@ class PatchSerializer(serializers.ModelSerializer):
 
     def get_products(self, obj):
         products_list = []
+
         for product in obj.products.filter(is_deleted=False):
             imgs = Image.objects.filter(
                 product=product,
@@ -445,6 +369,7 @@ class PatchSerializer(serializers.ModelSerializer):
             ).distinct()
 
             images_data = []
+
             for img in imgs:
                 # Serialize basic image data
                 image_serialized = ImageSerializer(img).data
@@ -459,7 +384,11 @@ class PatchSerializer(serializers.ModelSerializer):
                         "patch_build_number": patch_image.patch_build_number,
                     })
                 except PatchImage.DoesNotExist:
-                    pass  # Or handle accordingly if required
+                    pass
+
+                # Inject product-specific security field into each security issue
+                for issue in image_serialized.get("security_issues", []):
+                    issue["product_security_des"] = self.get_product_security_description(product, issue)
 
                 images_data.append(image_serialized)
 
@@ -469,3 +398,7 @@ class PatchSerializer(serializers.ModelSerializer):
             })
 
         return products_list
+
+    def get_product_security_description(self, product, issue):
+        # Customize this if you want to query DB or use logic
+        return f"Explanation specific to {product.name} for {issue.get('cve_id')}"
