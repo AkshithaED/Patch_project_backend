@@ -72,7 +72,7 @@ class PatchJarSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = PatchJar
-        fields = ('name', 'version', 'remarks')
+        fields = ('name', 'version', 'remarks', 'updated')
 
 class PatchHighLevelScopeSerializer(serializers.ModelSerializer):
     name    = serializers.CharField(source='scope.name', read_only=True)

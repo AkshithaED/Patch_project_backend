@@ -170,7 +170,7 @@ class PatchJar(models.Model):
     jar     = models.ForeignKey('Jar',   on_delete=models.CASCADE)
     remarks = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    updated    = models.BooleanField(default=False)
     class Meta:
         unique_together = ('patch', 'jar')
 
