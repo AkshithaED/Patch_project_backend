@@ -55,29 +55,6 @@ class Release(models.Model):
         return self.name
 
 
-# -----------------------
-# Product Model
-# -----------------------
-class Product(models.Model):
-    name = models.CharField(max_length=255, primary_key=True, default=defaults['product']['name'])
-    # version = models.CharField(max_length=50, default=defaults['product']['version'])
-    status = models.CharField(max_length=50, choices=[('Active', 'Active'), ('Inactive', 'Inactive')], default=defaults['product']['status'])
-    created_at = models.DateTimeField(default=timezone.now, editable=False)
-    updated_at = models.DateTimeField(auto_now=True)
-    is_deleted = models.BooleanField(default=False)
-    # objects = SoftDeleteManager()
-
-
-    def soft_delete(self):
-        self.is_deleted = True
-        self.save()
-
-    def delete(self, using=None, keep_parents=False):
-        self.soft_delete()
-
-    def __str__(self):
-        return self.name
-
 
 # -----------------------
 # Jar Model
@@ -99,6 +76,8 @@ class HighLevelScope(models.Model):
 
     def __str__(self):
         return self.name
+
+
 
 # -----------------------
 # Security Issue Model
@@ -125,6 +104,40 @@ class SecurityIssue(models.Model):
     def __str__(self):
         return f"Security Issue {self.cve_id}"
 
+# -----------------------
+# Product Model
+# -----------------------
+class Product(models.Model):
+    name = models.CharField(max_length=255, primary_key=True, default=defaults['product']['name'])
+    # version = models.CharField(max_length=50, default=defaults['product']['version'])
+    status = models.CharField(max_length=50, choices=[('Active', 'Active'), ('Inactive', 'Inactive')], default=defaults['product']['status'])
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)
+    # objects = SoftDeleteManager()
+    
+    
+    # Add the ManyToManyField with through here
+    security_issues = models.ManyToManyField(SecurityIssue, through='ProductSecurityIssue', related_name='products')
+
+    def soft_delete(self):
+        self.is_deleted = True
+        self.save()
+
+    def delete(self, using=None, keep_parents=False):
+        self.soft_delete()
+
+    def __str__(self):
+        return self.name
+
+        
+class ProductSecurityIssue(models.Model):
+    product = models.ForeignKey('Product', on_delete=models.CASCADE)
+    security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
+    product_security_des = models.TextField(default="")
+
+    class Meta:
+        unique_together = ('product', 'security_issue')
 
 # -----------------------
 # Image Model
