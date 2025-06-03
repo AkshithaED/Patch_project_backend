@@ -78,3 +78,40 @@ def patch_completion_percentage(request, name):
 
     percentage = round((completed_items / total_items) * 100, 2)
     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def patch_product_completion_status(request, name):
+    try:
+        patch = Patch.objects.get(name=name, is_deleted=False)
+    except Patch.DoesNotExist:
+        return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = PatchSerializer(patch)
+    patch_data = serializer.data
+
+    completed_products = []
+    incomplete_products = []
+
+    for product in patch_data.get('products', []):
+        total_images = 0
+        completed_images = 0
+
+        for image in product.get('images', []):
+            total_images += 1
+            if image.get('registry') and image.get('registry').lower() == 'released':
+                completed_images += 0.5
+            if image.get('ot2_pass') and image.get('ot2_pass').lower() == 'released':
+                completed_images += 0.5
+
+        if total_images == 0:
+            incomplete_products.append(product)
+        elif completed_images == total_images:
+            completed_products.append(product)
+        else:
+            incomplete_products.append(product)
+
+    return Response({
+        "completed_products": completed_products,
+        "incomplete_products": incomplete_products
+    }, status=status.HTTP_200_OK)
