@@ -238,6 +238,7 @@ class Patch(models.Model):
         ('rejected', 'Rejected'),
         ('released', 'Released'),
         ('verified', 'Verified'),
+        ('in_progress', 'In progress')
     ]
     
     name = models.CharField(max_length=255, primary_key=True)
