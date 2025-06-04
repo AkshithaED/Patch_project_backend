@@ -195,17 +195,18 @@ class PatchJar(models.Model):
 # PatchProductJar Model
 # -----------------------
 class PatchProductJar(models.Model):
-    patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
+    # patch = models.ForeignKey('Patch', on_delete=models.CASCADE)
     product = models.ForeignKey('Product', on_delete=models.CASCADE)
-    jar = models.ForeignKey('Jar', on_delete=models.CASCADE)
+    # jar = models.ForeignKey('Jar', on_delete=models.CASCADE)
+    patch_jar_id = models.ForeignKey('PatchJar', on_delete=models.CASCADE)
     current_version = models.CharField(max_length=100, blank=True, null=True)  # Existing version
-    version = models.CharField(max_length=100, blank=True, null=True) 
+    # version = models.CharField(max_length=100, blank=True, null=True) 
     remarks = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('patch', 'product', 'jar')
+        unique_together = ('patch_jar_id', 'product')
         verbose_name = 'Patch Product Jar'
         verbose_name_plural = 'Patch Product Jars'
 

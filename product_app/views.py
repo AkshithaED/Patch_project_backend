@@ -156,48 +156,48 @@ def update_patch_data(request):
             )
 
         # 2.a) Process Jars → get_or_create + overwrite only keys provided
-        for jar_data in prod_data.get("jars", []):
-            jar_name = jar_data.get("name")
-            if not jar_name:
-                continue
+        # for jar_data in prod_data.get("jars", []):
+        #     jar_name = jar_data.get("name")
+        #     if not jar_name:
+        #         continue
 
-            #  2.a.i) Ensure the Jar exists (or create it if missing)
-            jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
+        #     #  2.a.i) Ensure the Jar exists (or create it if missing)
+        #     jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
 
 
 
-            try:
-                existing_patchjar = PatchJar.objects.get(patch=patch, jar=jar_obj)
-                default_version = existing_patchjar.version
-            except PatchJar.DoesNotExist:
-                default_version = None
+        #     try:
+        #         existing_patchjar = PatchJar.objects.get(patch=patch, jar=jar_obj)
+        #         default_version = existing_patchjar.version
+        #     except PatchJar.DoesNotExist:
+        #         default_version = None
 
-            #  2.a.ii) Get or create the PatchProductJar for (patch, product, jar)
-            ppj, created = PatchProductJar.objects.get_or_create(
-                patch=patch,
-                product=product,
-                jar=jar_obj,
-                defaults={
-                    # If they didn’t send curr_version/updated/version/remarks,
-                    # these defaults only apply on creation. On update, we'll override if keys exist.
-                    "current_version": jar_data.get("curr_version", None),
-                    "updated": jar_data.get("updated", False),
-                    "version": default_version or jar_data.get("version", None),
-                    "remarks": jar_data.get("remarks", "")
-                }
-            )
+        #     #  2.a.ii) Get or create the PatchProductJar for (patch, product, jar)
+        #     ppj, created = PatchProductJar.objects.get_or_create(
+        #         patch=patch,
+        #         product=product,
+        #         jar=jar_obj,
+        #         defaults={
+        #             # If they didn’t send curr_version/updated/version/remarks,
+        #             # these defaults only apply on creation. On update, we'll override if keys exist.
+        #             "current_version": jar_data.get("curr_version", None),
+        #             "updated": jar_data.get("updated", False),
+        #             "version": default_version or jar_data.get("version", None),
+        #             "remarks": jar_data.get("remarks", "")
+        #         }
+        #     )
 
-            if not created:
-                # The row already existed → only overwrite fields that arrived in JSON
-                if "curr_version" in jar_data:
-                    ppj.current_version = jar_data["curr_version"]
-                if "updated" in jar_data:
-                    ppj.updated = jar_data["updated"]
-                if "version" in jar_data:
-                    ppj.version = jar_data["version"]
-                if "remarks" in jar_data:
-                    ppj.remarks = jar_data["remarks"]
-                ppj.save()
+        #     if not created:
+        #         # The row already existed → only overwrite fields that arrived in JSON
+        #         if "curr_version" in jar_data:
+        #             ppj.current_version = jar_data["curr_version"]
+        #         if "updated" in jar_data:
+        #             ppj.updated = jar_data["updated"]
+        #         if "version" in jar_data:
+        #             ppj.version = jar_data["version"]
+        #         if "remarks" in jar_data:
+        #             ppj.remarks = jar_data["remarks"]
+        #         ppj.save()
 
         # 2.b) Process Images → upsert only the fields present
         helm_charts_val = prod_data.get("helm_charts", None)
