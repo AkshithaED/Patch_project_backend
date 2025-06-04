@@ -61,7 +61,6 @@ class Release(models.Model):
 # -----------------------
 class Jar(models.Model):
     name = models.CharField(primary_key = True,max_length=255)
-    version = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -72,7 +71,6 @@ class Jar(models.Model):
 # -----------------------
 class HighLevelScope(models.Model):
     name = models.CharField(primary_key=True, max_length=255)
-    version = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -221,6 +219,7 @@ class PatchProductJar(models.Model):
 class PatchHighLevelScope(models.Model):
     patch   = models.ForeignKey('Patch', on_delete=models.CASCADE)
     scope   = models.ForeignKey('HighLevelScope', on_delete=models.CASCADE)
+    version = models.CharField(max_length=100, blank=True, null=True)
     remarks = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

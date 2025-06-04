@@ -159,12 +159,12 @@ class SecurityIssueAdmin(admin.ModelAdmin):
 # -----------------------
 @admin.register(Jar)
 class JarAdmin(admin.ModelAdmin):
-    list_display = ('name', 'version')
+    list_display = ('name',)
     search_fields = ('name',)
 
 @admin.register(HighLevelScope)
 class HighLevelScopeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'version')
+    list_display = ('name', )
     search_fields = ('name',)
 
 @admin.register(PatchProductImage)
