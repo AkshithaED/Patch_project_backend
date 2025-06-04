@@ -100,7 +100,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class PatchJarSerializer(serializers.ModelSerializer):
     name    = serializers.CharField(source='jar.name', read_only=True)
-    version = serializers.CharField(source='jar.version', read_only=True)
+    # version = serializers.CharField(source='jar.version', read_only=True)
+    version = serializers.CharField(read_only=True)
     remarks = serializers.CharField()
 
     class Meta:
@@ -109,7 +110,7 @@ class PatchJarSerializer(serializers.ModelSerializer):
 
 class PatchHighLevelScopeSerializer(serializers.ModelSerializer):
     name    = serializers.CharField(source='scope.name', read_only=True)
-    version = serializers.CharField(source='scope.version', read_only=True)
+    version = serializers.CharField( read_only=True)
     remarks = serializers.CharField()
 
     class Meta:
@@ -239,26 +240,28 @@ class PatchSerializer(serializers.ModelSerializer):
         for jd in jars_payload:
             jar_obj, _ = Jar.objects.get_or_create(
                 name=jd['name'],
-                defaults={'version': jd.get('version')}
+                # defaults={'version': jd.get('version')}
             )
             # update existing or create new PatchJar row
             PatchJar.objects.update_or_create(
                 patch=patch,
                 jar=jar_obj,
-                defaults={'remarks': jd.get('remarks', '')}
+                defaults={'version': jd.get('version', None),
+                'remarks': jd.get('remarks', '')}
             )
 
         # 5) Link scopes + remarks
         for sd in scopes_payload:
             scope_obj, _ = HighLevelScope.objects.get_or_create(
                 name=sd['name'],
-                defaults={'version': sd.get('version')}
+                # defaults={'version': sd.get('version')}
             )
             # update existing or create new through‐row
             PatchHighLevelScope.objects.update_or_create(
                 patch=patch,
                 scope=scope_obj,
-                defaults={'remarks': sd.get('remarks', '')}
+                defaults={'version': sd.get('version', None),
+                'remarks': sd.get('remarks', '')}
             )
 
         return patch
@@ -319,12 +322,13 @@ class PatchSerializer(serializers.ModelSerializer):
             for jd in jars_payload:
                 jar_obj, _ = Jar.objects.get_or_create(
                     name=jd['name'],
-                    defaults={'version': jd.get('version')}
+                    # defaults={'version': jd.get('version')}
                 )
                 PatchJar.objects.update_or_create(
                     patch=patch,
                     jar=jar_obj,
-                    defaults={'remarks': jd.get('remarks', '')}
+                    defaults={'version': jd.get('version', None),
+                    'remarks': jd.get('remarks', '')}
                 )
             # And remove any jars *not* in the new payload:
             kept_jars = [ jd['name'] for jd in jars_payload ]
@@ -340,12 +344,13 @@ class PatchSerializer(serializers.ModelSerializer):
             for sd in scopes_payload:
                 scope_obj, _ = HighLevelScope.objects.get_or_create(
                     name=sd['name'],
-                    defaults={'version': sd.get('version')}
+                    # defaults={'version': sd.get('version')}
                 )
                 PatchHighLevelScope.objects.update_or_create(
                     patch=patch,
                     scope=scope_obj,
-                    defaults={'remarks': sd.get('remarks', '')}
+                    defaults={'version': sd.get('version', None),
+                    'remarks': sd.get('remarks', '')}
                 )
 
             # 2) Remove any old scopes not in the new payload
