@@ -82,6 +82,7 @@ class HighLevelScope(models.Model):
 # -----------------------
 # Security Issue Model
 # -----------------------
+
 class SecurityIssue(models.Model):
     cve_id = models.CharField(primary_key = True,max_length=255, default=defaults['security_issue']['cve_id'])
     cvss_score = models.FloatField(default=defaults['security_issue']['cvss_score'])
@@ -93,6 +94,9 @@ class SecurityIssue(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
     # objects = SoftDeleteManager()
+
+    class Meta:
+        unique_together = ('cve_id', 'cvss_score', 'severity', 'affected_libraries')
 
     def soft_delete(self):
         self.is_deleted = True
@@ -130,14 +134,8 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
-        
-class ProductSecurityIssue(models.Model):
-    product = models.ForeignKey('Product', on_delete=models.CASCADE)
-    security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
-    product_security_des = models.TextField(default="")
 
-    class Meta:
-        unique_together = ('product', 'security_issue')
+
 
 # -----------------------
 # Image Model
@@ -156,8 +154,8 @@ class Image(models.Model):
     # objects = SoftDeleteManager()
 
     
-    # class Meta:
-    #     unique_together = ('image_name', 'version_name')
+    class Meta:
+        unique_together = ('image_name', 'build_number')
 
     def twistlock_status(self):
         if self.twistlock_report_clean:
@@ -301,6 +299,8 @@ class PatchImage(models.Model):
         max_length=15,
         choices=STATUS_CHOICES,
         default='Not Released',
+        blank=True,
+        null=True,
     )
     registry = models.CharField(
         max_length=15,
@@ -324,3 +324,24 @@ class PatchImage(models.Model):
 # class ProductSecurityIssues(models.Model):
 
 #        description_product = models.TextField(default="specific product Security issue description", blank=True, null=True)
+
+        
+# class ProductSecurityIssue(models.Model):
+#     product = models.ForeignKey('Product', on_delete=models.CASCADE)
+#     security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
+#     product_security_des = models.TextField(default="")
+
+#     class Meta:
+#         unique_together = ('product', 'security_issue')
+
+
+class ProductSecurityIssue(models.Model):
+    # patch = models.ForeignKey('Patch', on_delete=models.CASCADE)  # NEW
+    patch = models.ForeignKey(Patch, on_delete=models.CASCADE, null=True, blank=True)
+
+    product = models.ForeignKey('Product', on_delete=models.CASCADE)
+    security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
+    product_security_des = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        unique_together = ('patch', 'product', 'security_issue')  # UPDATED
