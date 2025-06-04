@@ -235,9 +235,8 @@ class PatchHighLevelScope(models.Model):
 class Patch(models.Model):
     PATCH_STATE_CHOICES = [
         ('new', 'New'),
-        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
         ('released', 'Released'),
-        ('verified', 'Verified'),
         ('in_progress', "In progress")
     ]
     
