@@ -230,37 +230,39 @@ class PatchSerializer(serializers.ModelSerializer):
 
             for img_dict in pd['images']:
                 img_name = img_dict.get('image_name')
-                # ✅ Now img is only set if img_name is valid
                 existing_img = Image.objects.filter(image_name=img_name).first()
 
                 if existing_img:
-                    # Create new image with same data but new build_number (patch.name)
+                    # Always create a new image with fresh twistlock fields
                     img, created = Image.objects.get_or_create(
                         product=pkg,
                         image_name=img_name,
                         build_number=patch.name,
                         defaults={
-                            'release_date': existing_img.release_date,
-                            'twistlock_report_url': existing_img.twistlock_report_url,
-                            'twistlock_report_clean': existing_img.twistlock_report_clean,
-                            'is_deleted': False,
+                            'release_date': patch.release_date,
+                            "is_deleted": False,
+                            "twistlock_report_url": None,
+                            "twistlock_report_clean": None,
                         }
                     )
                     if not created:
-                        # If already exists, update fields if needed
+                        img.twistlock_report_url = None
+                        img.twistlock_report_clean = None
                         img.is_deleted = False
                         img.save()
 
-                    for issue in existing_img.security_issues.all():
-                        img.security_issues.add(issue)
                 else:
-                   
+                    # New image – also ensure twistlock fields are null
                     img = Image.objects.create(
                         product=pkg,
                         image_name=img_name,
                         build_number=patch.name,
-                        # other default fields here
+                        release_date= patch.release_date ,
+                        twistlock_report_url=None,
+                        twistlock_report_clean=None,
+                        is_deleted=False,
                     )
+
 
                 # Create PatchProductImage (basic linking)
                 PatchProductImage.objects.get_or_create(
@@ -385,16 +387,13 @@ class PatchSerializer(serializers.ModelSerializer):
                             image_name=img_name,
                             build_number=patch.name,
                             defaults={
-                                'release_date': existing_img.release_date,
-                                'twistlock_report_url': existing_img.twistlock_report_url,
-                                'twistlock_report_clean': existing_img.twistlock_report_clean,
                                 'is_deleted': False,
+                                'release_date': patch.release_date 
                             }
                         )
-                        # Copy security issues if newly created
-                        if created:
-                            for issue in existing_img.security_issues.all():
-                                img.security_issues.add(issue)
+                        img.twistlock_report_url = None
+                        img.twistlock_report_clean = None
+                        img.save()
 
                     elif existing_img and existing_img.build_number == patch.name:
                         # Use the existing one, update if needed
@@ -403,15 +402,15 @@ class PatchSerializer(serializers.ModelSerializer):
                         img = existing_img
 
                     else:
-                        # No existing image at all
-                        img, created = Image.objects.get_or_create(
+                        # No existing image at all – ensure twistlock fields are null
+                        img = Image.objects.create(
                             product=pkg,
                             image_name=img_name,
                             build_number=patch.name,
-                            defaults={
-                                'is_deleted': False,
-                                # other default fields here
-                            }
+                            release_date= patch.release_date,
+                            is_deleted=False,
+                            twistlock_report_url=None,
+                            twistlock_report_clean=None
                         )
 
 
