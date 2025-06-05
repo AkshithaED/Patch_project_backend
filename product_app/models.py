@@ -80,6 +80,7 @@ class HighLevelScope(models.Model):
 # -----------------------
 # SecurityIssue Model
 # -----------------------
+
 class SecurityIssue(models.Model):
     cve_id = models.CharField(max_length=255, default=defaults['security_issue']['cve_id'])
     cvss_score = models.FloatField(default=defaults['security_issue']['cvss_score'])
@@ -132,36 +133,28 @@ class Product(models.Model):
         return self.name
 
 
-# -----------------------
-# ProductSecurityIssue Model
-# ----------------------- 
-class ProductSecurityIssue(models.Model):
-    product = models.ForeignKey('Product', on_delete=models.CASCADE)
-    security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
-    product_security_des = models.TextField(default="")
 
-    class Meta:
-        unique_together = ('product', 'security_issue')
 
 # -----------------------
 # Image Model
 # -----------------------
+
 class Image(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
-    image_name = models.CharField(primary_key = True,default=defaults['image']['image_name'], max_length=255)
+    image_name = models.CharField(default=defaults['image']['image_name'], max_length=255)
     build_number = models.CharField(max_length=100, default=defaults['image']['build_number'])
     release_date = models.DateField(default=defaults['release']['release_date'])
-    twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'])
+    twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'], null=True, blank=True)
+    twistlock_report_clean = models.BooleanField(default=True, null=True, blank=True)
     security_issues = models.ManyToManyField(SecurityIssue, related_name='images', blank=True)
-    twistlock_report_clean = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
     # objects = SoftDeleteManager()
 
     
-    # class Meta:
-    #     unique_together = ('image_name', 'version_name')
+    class Meta:
+        unique_together = ('image_name', 'build_number')
 
     def twistlock_status(self):
         if self.twistlock_report_clean:
@@ -332,6 +325,8 @@ class PatchImage(models.Model):
         max_length=15,
         choices=STATUS_CHOICES,
         default='Not Released',
+        blank=True,
+        null=True,
     )
     registry = models.CharField(
         max_length=15,
@@ -355,3 +350,24 @@ class PatchImage(models.Model):
 # class ProductSecurityIssues(models.Model):
 
 #        description_product = models.TextField(default="specific product Security issue description", blank=True, null=True)
+
+        
+# class ProductSecurityIssue(models.Model):
+#     product = models.ForeignKey('Product', on_delete=models.CASCADE)
+#     security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
+#     product_security_des = models.TextField(default="")
+
+#     class Meta:
+#         unique_together = ('product', 'security_issue')
+
+
+class ProductSecurityIssue(models.Model):
+    # patch = models.ForeignKey('Patch', on_delete=models.CASCADE)  # NEW
+    patch = models.ForeignKey(Patch, on_delete=models.CASCADE, null=True, blank=True)
+
+    product = models.ForeignKey('Product', on_delete=models.CASCADE)
+    security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
+    product_security_des = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        unique_together = ('patch', 'product', 'security_issue')  # UPDATED
