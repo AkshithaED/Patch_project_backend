@@ -78,10 +78,10 @@ class HighLevelScope(models.Model):
 
 
 # -----------------------
-# Security Issue Model
+# SecurityIssue Model
 # -----------------------
 class SecurityIssue(models.Model):
-    cve_id = models.CharField(primary_key = True,max_length=255, default=defaults['security_issue']['cve_id'])
+    cve_id = models.CharField(max_length=255, default=defaults['security_issue']['cve_id'])
     cvss_score = models.FloatField(default=defaults['security_issue']['cvss_score'])
     severity = models.CharField(max_length=50, choices=[('Critical', 'Critical'), ('High', 'High'), ('Medium', 'Medium')], default=defaults['security_issue']['severity'])
     affected_libraries = models.TextField(default=defaults['security_issue']['affected_libraries'])
@@ -91,7 +91,10 @@ class SecurityIssue(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
     # objects = SoftDeleteManager()
-
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['cve_id', 'cvss_score', 'severity', 'affected_libraries'], name='unique_security_issue')
+        ]
     def soft_delete(self):
         self.is_deleted = True
         self.save()

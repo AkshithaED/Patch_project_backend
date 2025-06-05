@@ -54,7 +54,7 @@ class ImageSerializer(serializers.ModelSerializer):
     security_issue_ids = serializers.SlugRelatedField(
         many=True,
         write_only=True,
-        slug_field='cve_id',
+        slug_field='id',
         queryset=SecurityIssue.objects.filter(is_deleted=False)
     )
 
