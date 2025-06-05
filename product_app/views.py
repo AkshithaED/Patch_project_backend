@@ -4,6 +4,7 @@ from rest_framework import viewsets, status, serializers
 from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
+from django.shortcuts import get_object_or_404
 
 
 class ReleaseViewSet(viewsets.ModelViewSet):
@@ -24,7 +25,12 @@ class ProductViewSet(viewsets.ModelViewSet):
 class ImageViewSet(viewsets.ModelViewSet):
     queryset = Image.objects.filter(is_deleted=False)
     serializer_class = ImageSerializer
-    lookup_field = 'image_name'
+
+    def get_object(self):
+        image_name = self.kwargs['image_name']
+        build_number = self.kwargs['build_number']
+        return get_object_or_404(Image, image_name=image_name, build_number=build_number, is_deleted=False)
+
 
 class SecurityIssueViewSet(viewsets.ModelViewSet):
     queryset = SecurityIssue.objects.filter(is_deleted=False)

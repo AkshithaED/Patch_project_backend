@@ -140,9 +140,10 @@ class Product(models.Model):
 # -----------------------
 # Image Model
 # -----------------------
+
 class Image(models.Model):
     product = models.ForeignKey('Product', related_name='images', on_delete=models.CASCADE)
-    image_name = models.CharField(primary_key = True,default=defaults['image']['image_name'], max_length=255)
+    image_name = models.CharField(default=defaults['image']['image_name'], max_length=255)
     build_number = models.CharField(max_length=100, default=defaults['image']['build_number'])
     release_date = models.DateField(default=defaults['release']['release_date'])
     twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'])
