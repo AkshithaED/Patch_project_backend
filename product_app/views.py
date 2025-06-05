@@ -220,7 +220,8 @@ def update_patch_data(request):
 
             #  2.b.i) Try to fetch an existing Image for this product
             try:
-                image = Image.objects.get(image_name=image_name, product=product)
+                # image = Image.objects.get(image_name=image_name, product=product)
+                image = Image.objects.get(image_name=image_name, build_number=patch__name)
                 # Overwrite only the fields they provided:
                 # if "build_number" in img_data:
                 #     image.build_number = img_data["build_number"]
@@ -234,7 +235,7 @@ def update_patch_data(request):
                 create_kwargs = {
                     "product": product,
                     "image_name": image_name,
-                    # "build_number": img_data.get("build_number", ""),
+                    "build_number": img_data.get("patch_name", ""),
                     "twistlock_report_url": img_data.get("twistlock_report_url", ""),
                     "twistlock_report_clean": img_data.get("twistlock_report_clean", True),
                 }
