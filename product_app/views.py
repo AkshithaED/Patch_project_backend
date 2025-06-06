@@ -306,7 +306,7 @@ def update_patch_data(request):
 
     return Response({"status": "success"}, status=status.HTTP_200_OK)
 
-
+# API to get product specific jars
 @api_view(['GET'])
 def patch_product_jars_list(request, patch_name, product_name):
     # patch_name = request.query_params.get('patch_name')
@@ -356,3 +356,80 @@ def patch_product_jars_list(request, patch_name, product_name):
         jars_list.append(jar_dict)
 
     return Response({"jars": jars_list}, status=status.HTTP_200_OK)
+
+
+@api_view(['PATCH'])
+def update_patch_product_jar(request, patch_name, product_name, jar_name):
+    # 1) Look up the Patch
+    try:
+        patch = Patch.objects.get(name=patch_name, is_deleted=False)
+    except Patch.DoesNotExist:
+        return Response(
+            {"error": f"Patch '{patch_name}' not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 2) Look up the Product
+    try:
+        product = Product.objects.get(name=product_name, is_deleted=False)
+    except Product.DoesNotExist:
+        return Response(
+            {"error": f"Product '{product_name}' not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 3) Look up the Jar
+    try:
+        jar = Jar.objects.get(name=jar_name)
+    except Jar.DoesNotExist:
+        return Response(
+            {"error": f"Jar '{jar_name}' not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 4) Find the matching PatchJar (patch, jar)
+    try:
+        patch_jar = PatchJar.objects.get(patch=patch, jar=jar)
+    except PatchJar.DoesNotExist:
+        return Response(
+            {"error": f"No PatchJar found for patch '{patch_name}' and jar '{jar_name}'."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 5) Find the single PatchProductJar row for (patch_jar, product)
+    try:
+        ppj = PatchProductJar.objects.get(patch_jar_id=patch_jar, product=product)
+    except PatchProductJar.DoesNotExist:
+        return Response(
+            {
+              "error": (
+                f"No PatchProductJar found for patch='{patch_name}', "
+                f"product='{product_name}', jar='{jar_name}'."
+              )
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 6) Update only fields provided in JSON
+    data = request.data
+    updated = False
+
+    if "remarks" in data:
+        ppj.remarks = data["remarks"]
+        updated = True
+
+    if "updated" in data:
+        ppj.updated = data["updated"]
+        updated = True
+
+    if updated:
+        ppj.save()
+        return Response(
+            {"status": "success", "remarks": ppj.remarks, "updated": ppj.updated},
+            status=status.HTTP_200_OK
+        )
+    else:
+        return Response(
+            {"error": "No updatable fields ('remarks' or 'updated') provided."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
