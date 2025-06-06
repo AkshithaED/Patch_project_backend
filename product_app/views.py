@@ -19,6 +19,7 @@ class PatchViewSet(viewsets.ModelViewSet):
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.filter(is_deleted=False)
+    # queryset = Product.objects.filter(is_deleted=False, is_helm_chart=False)
     serializer_class = ProductSerializer
     lookup_field = 'name'
 
