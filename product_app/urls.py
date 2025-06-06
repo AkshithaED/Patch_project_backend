@@ -4,7 +4,7 @@ from django.urls import path, include
 from .views import (
     ReleaseViewSet, ProductViewSet, ImageViewSet,
     SecurityIssueViewSet, PatchViewSet, JarViewSet,
-    HighLevelScopeViewSet, patch_completion_percentage,patch_product_completion_status, update_patch_data
+    HighLevelScopeViewSet, patch_completion_percentage,patch_product_completion_status, update_patch_data, patch_product_jars_list
 )
 
 release_list = ReleaseViewSet.as_view({
@@ -109,4 +109,5 @@ urlpatterns = [
     path('jars/<str:name>/', jar_detail, name='jar-detail'),
     path('high-level-scopes/', high_level_scope_list, name='high-level-scope-list'),
     path('high-level-scopes/<str:name>/', high_level_scope_detail, name='high-level-scope-detail'),
+    path('patchproductjars/<str:patch_name>/<str:product_name>/', patch_product_jars_list),
 ]

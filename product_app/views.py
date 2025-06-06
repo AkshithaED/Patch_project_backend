@@ -221,7 +221,7 @@ def update_patch_data(request):
             #  2.b.i) Try to fetch an existing Image for this product
             try:
                 # image = Image.objects.get(image_name=image_name, product=product)
-                image = Image.objects.get(image_name=image_name, build_number=patch__name)
+                image = Image.objects.get(image_name=image_name, build_number=patch_name)
                 # Overwrite only the fields they provided:
                 # if "build_number" in img_data:
                 #     image.build_number = img_data["build_number"]
@@ -305,3 +305,54 @@ def update_patch_data(request):
     # End of “for each product” loop
 
     return Response({"status": "success"}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def patch_product_jars_list(request, patch_name, product_name):
+    # patch_name = request.query_params.get('patch_name')
+    # product_name = request.query_params.get('product_name')
+
+    if not patch_name or not product_name:
+        return Response(
+            {"error": "Both 'patch_name' and 'product_name' query parameters are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # 1) Verify patch exists
+    try:
+        patch = Patch.objects.get(name=patch_name, is_deleted=False)
+    except Patch.DoesNotExist:
+        return Response(
+            {"error": f"Patch '{patch_name}' not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 2) Verify product exists
+    try:
+        product = Product.objects.get(name=product_name, is_deleted=False)
+    except Product.DoesNotExist:
+        return Response(
+            {"error": f"Product '{product_name}' not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 3) Fetch all PatchProductJar rows for (patch, product)
+    ppj_qs = PatchProductJar.objects.filter(
+        patch_jar_id__patch=patch,
+        product=product
+    )
+
+    # 4) Build response array
+    jars_list = []
+    for ppj in ppj_qs:
+        pj = ppj.patch_jar_id  # the related PatchJar instance
+        jar_dict = {
+            "name": pj.jar.name,
+            "version": pj.version,
+            "current_version": ppj.current_version,
+            "remarks": ppj.remarks,
+            "updated": ppj.updated,
+        }
+        jars_list.append(jar_dict)
+
+    return Response({"jars": jars_list}, status=status.HTTP_200_OK)
