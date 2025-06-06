@@ -335,6 +335,14 @@ class PatchImage(models.Model):
         blank=True,
         null=True,
     )
+    patch_build_number = models.CharField(max_length=50, blank=True, null=True)
+
+    # other patch-specific fields related to this image
+
+class PatchProductHelmChart(models.Model):
+    patch = models.ForeignKey(Patch, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+
     helm_charts = models.CharField(
         max_length=15,
         choices=STATUS_CHOICES,
@@ -342,23 +350,7 @@ class PatchImage(models.Model):
         blank=True,
         null=True,
     )
-    patch_build_number = models.CharField(max_length=50, blank=True, null=True)
 
-    # other patch-specific fields related to this image
-
-
-# class ProductSecurityIssues(models.Model):
-
-#        description_product = models.TextField(default="specific product Security issue description", blank=True, null=True)
-
-        
-# class ProductSecurityIssue(models.Model):
-#     product = models.ForeignKey('Product', on_delete=models.CASCADE)
-#     security_issue = models.ForeignKey(SecurityIssue, on_delete=models.CASCADE)
-#     product_security_des = models.TextField(default="")
-
-#     class Meta:
-#         unique_together = ('product', 'security_issue')
 
 
 class ProductSecurityIssue(models.Model):

@@ -1,7 +1,7 @@
 from django.utils import timezone
 
 from rest_framework import serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage,ProductSecurityIssue
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage,ProductSecurityIssue,PatchProductHelmChart
 
 class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -139,7 +139,6 @@ class PatchImageNestedSerializer(serializers.ModelSerializer):
     image_name = serializers.CharField(write_only=True) 
     ot2_pass = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     registry = serializers.CharField(allow_null=True, allow_blank=True, required=False)
-    helm_charts = serializers.CharField(allow_null=True, allow_blank=True, required=False)
     patch_build_number = serializers.CharField(allow_null=True, allow_blank=True, required=False)
 
 
@@ -150,15 +149,21 @@ class PatchImageNestedSerializer(serializers.ModelSerializer):
             'image_name' ,        
             'ot2_pass',       
             'registry',
-            'helm_charts',
             'patch_build_number',
         ]
 
+class ProductHelmChartsSerializer(serializers.ModelSerializer):
+    helm_charts = serializers.CharField(allow_null=True, allow_blank=True, required=False)
 
+    class Meta:
+        model = PatchProductHelmChart  # your Product model
+        fields = ['helm_charts']  # add more fields if needed
 
 
 class ProductNestedSerializer(serializers.Serializer):
     name = serializers.CharField()
+    # helm_charts = ProductHelmChartsSerializer(many=True)  
+    helm_charts = serializers.CharField(allow_null=True, allow_blank=True, required=False)  # single string
     images = PatchImageNestedSerializer(many=True)
 
 
@@ -216,6 +221,7 @@ class PatchSerializer(serializers.ModelSerializer):
 
         # 2) Create the Patch record
         patch = super().create(validated_data)
+        print("Received products_data in create:", products_payload)
 
         for pd in products_payload:
             pkg, created = Product.objects.get_or_create(
@@ -227,6 +233,14 @@ class PatchSerializer(serializers.ModelSerializer):
                 }
             )
             patch.products.add(pkg)
+            # Save helm_charts for the product if provided
+            helm_charts_value = pd.get('helm_charts')
+            if helm_charts_value is not None:
+                PatchProductHelmChart.objects.update_or_create(
+                    patch=patch,
+                    product=pkg,
+                    defaults={"helm_charts": helm_charts_value}
+                )
 
 
             for img_dict in pd['images']:
@@ -279,11 +293,10 @@ class PatchSerializer(serializers.ModelSerializer):
                     defaults={
                         'ot2_pass': img_dict.get('ot2_pass'),
                         'registry': img_dict.get('registry'),
-                        'helm_charts': img_dict.get('helm_charts'),
                         'patch_build_number': img_dict.get('patch_build_number'),
                     }
                 )
-                # print("initial_products_data",initial_products_data)
+                print("initial_products_data",initial_products_data)
 
         for pd_raw in initial_products_data:
             pkg = Product.objects.get(name=pd_raw['name'])
@@ -372,6 +385,14 @@ class PatchSerializer(serializers.ModelSerializer):
                     }
                 )
                 patch.products.add(pkg)
+                # Update helm_charts if provided
+                helm_charts_value = pd.get('helm_charts')
+                if helm_charts_value is not None:
+                    PatchProductHelmChart.objects.update_or_create(
+                        patch=patch,
+                        product=pkg,
+                        defaults={"helm_charts": helm_charts_value}
+                    )
 
 
 
@@ -431,7 +452,6 @@ class PatchSerializer(serializers.ModelSerializer):
                         defaults={
                             'ot2_pass': img_dict.get('ot2_pass'),
                             'registry': img_dict.get('registry'),
-                            'helm_charts': img_dict.get('helm_charts'),
                             'patch_build_number': img_dict.get('patch_build_number'),
                         }
                     )
@@ -511,39 +531,7 @@ class PatchSerializer(serializers.ModelSerializer):
 
         return patch
 
-    # def get_products(self, obj):
-    #     patch = obj
-    #     products_qs = obj.products.filter(is_deleted=False)
-
-    #     # Serialize products with context so nested serializers can use 'patch'
-    #     serializer = ProductSerializer(
-    #         products_qs,
-    #         many=True,
-    #         context={'patch': patch}
-    #     )
-    #     products_data = serializer.data
-
-    #     # Add patch-specific fields to each image in each product
-    #     for product_data in products_data:
-    #         product_name = product_data['name']
-    #         for image_data in product_data['images']:
-    #             img_name = image_data['image_name']
-    #             try:
-    #                 patch_image = PatchImage.objects.get(
-    #                     patch=patch,
-    #                     image__image_name=img_name,
-    #                     image__product__name=product_name
-    #                 )
-    #                 image_data.update({
-    #                     "ot2_pass": patch_image.ot2_pass,
-    #                     "registry": patch_image.registry,
-    #                     "helm_charts": patch_image.helm_charts,
-    #                     "patch_build_number": patch_image.patch_build_number,
-    #                 })
-    #             except PatchImage.DoesNotExist:
-    #                 pass
-
-    #     return products_data
+    
     def get_products(self, obj):
         patch = obj
         products_qs = obj.products.filter(is_deleted=False)
@@ -560,6 +548,16 @@ class PatchSerializer(serializers.ModelSerializer):
         # but *only for images matching the current patch build_number*
         for product_data in products_data:
             product_name = product_data['name']
+
+            # helm charts
+            try:
+                helm_entry = PatchProductHelmChart.objects.get(
+                    patch=patch,
+                    product__name=product_name
+                )
+                product_data['helm_charts'] = helm_entry.helm_charts
+            except PatchProductHelmChart.DoesNotExist:
+                product_data['helm_charts'] = None
             # Filter images to only those with build_number == patch.name
             filtered_images = [
                 img for img in product_data['images']
@@ -579,7 +577,6 @@ class PatchSerializer(serializers.ModelSerializer):
                     image_data.update({
                         "ot2_pass": patch_image.ot2_pass,
                         "registry": patch_image.registry,
-                        "helm_charts": patch_image.helm_charts,
                         "patch_build_number": patch_image.patch_build_number,
                     })
                 except PatchImage.DoesNotExist:
