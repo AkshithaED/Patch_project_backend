@@ -99,7 +99,7 @@ def patch_completion_percentage(request, name):
     percentage = round((completed_items / total_items) * 100, 2)
     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
 
-
+    
 @api_view(['GET'])
 def patch_product_completion_status(request, name):
     try:
@@ -114,19 +114,31 @@ def patch_product_completion_status(request, name):
     incomplete_products = []
 
     for product in patch_data.get('products', []):
-        total_images = 0
-        completed_images = 0
+        total_items = 0
+        completed_items = 0
 
+        # --- Count JARs via PatchProductJar ---
+        ppj_qs = PatchProductJar.objects.filter(
+            patch_jar_id__patch=patch,
+            product=product.get('name')
+        )
+        for ppj in ppj_qs:
+            total_items += 1
+            if ppj.updated or (ppj.remarks and ppj.remarks.strip() != ""):
+                completed_items += 1
+
+        # --- Count image status ---
         for image in product.get('images', []):
-            total_images += 1
+            total_items += 1  # Each image counts as 1 unit (0.5 + 0.5)
             if image.get('registry') and image.get('registry').lower() == 'released':
-                completed_images += 0.5
+                completed_items += 0.5
             if image.get('ot2_pass') and image.get('ot2_pass').lower() == 'released':
-                completed_images += 0.5
+                completed_items += 0.5
 
-        if total_images == 0:
+        if total_items == 0:
+            # Nothing to track means incomplete
             incomplete_products.append(product)
-        elif completed_images == total_images:
+        elif completed_items == total_items:
             completed_products.append(product)
         else:
             incomplete_products.append(product)
@@ -135,6 +147,7 @@ def patch_product_completion_status(request, name):
         "completed_products": completed_products,
         "incomplete_products": incomplete_products
     }, status=status.HTTP_200_OK)
+
 
 
 #api for populating tables in database
