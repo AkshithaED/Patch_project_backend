@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
@@ -48,6 +48,7 @@ class HighLevelScopeViewSet(viewsets.ModelViewSet):
     serializer_class = HighLevelScopeSerializer
     lookup_field = 'name'
 
+#api for completion percentage of patch
 @api_view(['GET'])
 def patch_completion_percentage(request, name):
     try:
@@ -63,15 +64,27 @@ def patch_completion_percentage(request, name):
     completed_items = 0
 
     #  Check JARs
-    for jar in patch_data.get('jars', []):
-        total_items += 1
-        if jar.get('updated') is True:
-            completed_items += 1
-        elif jar.get('remarks'):  # updated == False but has remarks
-            completed_items += 1
+    # for jar in patch_data.get('jars', []):
+    #     total_items += 1
+    #     if jar.get('updated') is True:
+    #         completed_items += 1
+    #     elif jar.get('remarks'):  # updated == False but has remarks
+    #         completed_items += 1
 
     #  Check product images
     for product in patch_data.get('products', []):
+
+         #  Count JARs via PatchProductJar
+        ppj_qs = PatchProductJar.objects.filter(
+            patch_jar_id__patch=patch,
+            product=product.get('name')
+        )
+        for ppj in ppj_qs:
+            total_items += 1
+            # Completed if updated=True or non‐empty remarks
+            if ppj.updated or (ppj.remarks and ppj.remarks.strip() != ""):
+                completed_items += 1
+
         for image in product.get('images', []):
             total_items += 1  # 1/2 for registry release, 1/2 for OT2_PaaS
             if image.get('registry') and image.get('registry').lower() == 'released':
@@ -123,6 +136,8 @@ def patch_product_completion_status(request, name):
         "incomplete_products": incomplete_products
     }, status=status.HTTP_200_OK)
 
+
+#api for populating tables in database
 @api_view(['POST'])
 @transaction.atomic
 def update_patch_data(request):
@@ -303,6 +318,14 @@ def update_patch_data(request):
                 )
             # If no patch_image_defaults were provided, we leave any existing PatchImage untouched.
 
+        # 2.c) Upsert PatchProductHelmChart
+        helm_val = prod_data.get("helm_charts", None)
+        if helm_val is not None:
+            PatchProductHelmChart.objects.update_or_create(
+                patch=patch,
+                product=product,
+                defaults={"helm_charts": helm_val}
+            )
     # End of “for each product” loop
 
     return Response({"status": "success"}, status=status.HTTP_200_OK)
@@ -358,7 +381,7 @@ def patch_product_jars_list(request, patch_name, product_name):
 
     return Response({"jars": jars_list}, status=status.HTTP_200_OK)
 
-
+#API for updating patchproductjars
 @api_view(['PATCH'])
 def update_patch_product_jar(request, patch_name, product_name, jar_name):
     # 1) Look up the Patch
