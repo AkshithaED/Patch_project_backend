@@ -156,190 +156,191 @@ def patch_product_completion_status(request, name):
 def update_patch_data(request):
 
     data = request.data
-    # 1) Look up the Patch by name
-    patch_name = data.get("name")
-    if not patch_name:
-        return Response(
-            {"error": "Field 'name' is required at top level."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    try:
-        patch = Patch.objects.get(name=patch_name, is_deleted=False)
-    except Patch.DoesNotExist:
-        return Response(
-            {"error": f"Patch '{patch_name}' not found."},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    # 2) Iterate over each product in the payload
-    for prod_data in data.get("products", []):
-        product_name = prod_data.get("name")
-        if not product_name:
+    for patch_data in data:
+        # 1) Look up the Patch by name
+        patch_name = patch_data.get("name")
+        if not patch_name:
             return Response(
-                {"error": "Each product object must have a 'name'."},
+                {"error": "Field 'name' is required at top level."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            product = Product.objects.get(name=product_name, is_deleted=False)
-        except Product.DoesNotExist:
+            patch = Patch.objects.get(name=patch_name, is_deleted=False)
+        except Patch.DoesNotExist:
             return Response(
-                {"error": f"Product '{product_name}' not found."},
+                {"error": f"Patch '{patch_name}' not found."},
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        #
-        # 2.a) Process “jars” for this (patch, product) → write into PatchProductJar
-        #
-        for jar_data in prod_data.get("jars", []):  # ← new block
-            jar_name = jar_data.get("name")
-            if not jar_name:
-                continue
-
-            #  2.a.i) Ensure the Jar exists (or create it if missing)
-            jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
-
-            #  2.a.ii) Find the existing PatchJar for (this patch, this jar),
-            #            so we can pull its “version” field:
-            try:
-                patch_jar = PatchJar.objects.get(patch=patch, jar=jar_obj)
-            except PatchJar.DoesNotExist:
-                # If there is no PatchJar row yet, we can either:
-                #  • create a default one with version = None, or skip.
-                patch_jar = PatchJar.objects.create(patch=patch, jar=jar_obj, version=None, remarks="")
-            
-            #  2.a.iii) Now, upsert the PatchProductJar row.
-            defaults = {}
-
-            # If the payload sent “curr_version”, overwrite current_version:
-            if "curr_version" in jar_data:
-                defaults["current_version"] = jar_data.get("curr_version")
-            else:
-                # Optionally: do nothing, leave existing current_version alone.
-                pass
-
-            # Always set “version” from the PatchJar row (so they stay in sync):
-            # defaults["version"] = patch_jar.version
-
-            # If payload sent “updated” or “remarks”, copy them over:
-            if "updated" in jar_data:
-                defaults["updated"] = jar_data["updated"]
-            if "remarks" in jar_data:
-                defaults["remarks"] = jar_data["remarks"]
-
-            # Upsert PatchProductJar:
-            ppj, created = PatchProductJar.objects.update_or_create(
-                patch_jar_id=patch_jar,  # this is a ForeignKey to PatchJar
-                product=product,
-                defaults=defaults
-            )
-            # At this point, you have either created or updated the (
-            #    patch_jar_id = patch_jar, product = product
-            # ) row, with default values set above.
-
-        #
-        # 2.b) Process “images” for this (patch, product)
-        #      (update Image fields, PatchImage fields, and attach SecurityIssues)
-
-        for img_data in prod_data.get("images", []):
-            image_name = img_data.get("image_name")
-            if not image_name:
-                continue
-
-            #  2.b.i) Try to fetch an existing Image for this product
-            try:
-                # image = Image.objects.get(image_name=image_name, product=product)
-                image = Image.objects.get(image_name=image_name, build_number=patch_name)
-                # Overwrite only the fields they provided:
-                # if "build_number" in img_data:
-                #     image.build_number = img_data["build_number"]
-                if "twistlock_report_url" in img_data:
-                    image.twistlock_report_url = img_data["twistlock_report_url"]
-                if "twistlock_report_clean" in img_data:
-                    image.twistlock_report_clean = img_data["twistlock_report_clean"]
-                image.save()
-            except Image.DoesNotExist:
-                # If no existing Image, create one with defaults
-                create_kwargs = {
-                    "product": product,
-                    "image_name": image_name,
-                    "build_number": img_data.get("patch_name", ""),
-                    "twistlock_report_url": img_data.get("twistlock_report_url", ""),
-                    "twistlock_report_clean": img_data.get("twistlock_report_clean", True),
-                }
-                image = Image.objects.create(**create_kwargs)
-
-            #
-            #  2.b.ii) Upsert nested SecurityIssue rows if any were sent
-            #
-            if "security_issues" in img_data:
-                issue_objs = []
-                for issue_data in img_data["security_issues"]:
-                    # We match or create by the four fields (cve_id, cvss_score, severity, affected_libraries).
-                    # After creating/fetching, we will attach it to image.security_issues M2M.
-                    cve_id = issue_data.get("cve_id")
-                    cvss_score = issue_data.get("cvss_score")
-                    severity = issue_data.get("severity")
-                    affected_libraries = issue_data.get("affected_libraries")
-
-                    if not (cve_id and cvss_score is not None and severity and affected_libraries):
-                        # Skip incomplete entries
-                        continue
-
-                    # Build the “lookup” dict (the four‐field key) and “defaults” dict for any extra fields:
-                    lookup = {
-                        "cve_id": cve_id,
-                        "cvss_score": cvss_score,
-                        "severity": severity,
-                        "affected_libraries": affected_libraries
-                    }
-                    defaults = {
-                        "library_path": issue_data.get("library_path", ""),
-                        "description": issue_data.get("description", "Security issue description"),
-                        "is_deleted": False,
-                    }
-
-                    issue_obj, _ = SecurityIssue.objects.update_or_create(
-                        **lookup,
-                        defaults=defaults
-                    )
-                    issue_objs.append(issue_obj)
-
-                # Replace the image’s M2M set with exactly what they sent:
-                image.security_issues.set(issue_objs)
-
-            #
-            #  2.b.iii) Upsert (patch, image) → PatchImage, only on the fields given
-            #
-            patch_image_defaults = {}
-            if "ot2_pass" in img_data:
-                patch_image_defaults["ot2_pass"] = img_data["ot2_pass"]
-            if "registry" in img_data:
-                patch_image_defaults["registry"] = img_data["registry"]
-            # if "helm_charts" in img_data:
-            #     patch_image_defaults["helm_charts"] = img_data["helm_charts"]
-            if "build_number" in img_data:
-                patch_image_defaults["patch_build_number"] = img_data["build_number"]
-
-            if patch_image_defaults:
-                # update_or_create PatchImage row for (patch, image)
-                PatchImage.objects.update_or_create(
-                    patch=patch,
-                    image=image,
-                    defaults=patch_image_defaults
+        # 2) Iterate over each product in the payload
+        for prod_data in patch_data.get("products", []):
+            product_name = prod_data.get("name")
+            if not product_name:
+                return Response(
+                    {"error": "Each product object must have a 'name'."},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-            # If no patch_image_defaults were provided, we leave any existing PatchImage untouched.
 
-        # 2.c) Upsert PatchProductHelmChart
-        helm_val = prod_data.get("helm_charts", None)
-        if helm_val is not None:
-            PatchProductHelmChart.objects.update_or_create(
-                patch=patch,
-                product=product,
-                defaults={"helm_charts": helm_val}
-            )
-    # End of “for each product” loop
+            try:
+                product = Product.objects.get(name=product_name, is_deleted=False)
+            except Product.DoesNotExist:
+                return Response(
+                    {"error": f"Product '{product_name}' not found."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            #
+            # 2.a) Process “jars” for this (patch, product) → write into PatchProductJar
+            #
+            for jar_data in prod_data.get("jars", []):  # ← new block
+                jar_name = jar_data.get("name")
+                if not jar_name:
+                    continue
+
+                #  2.a.i) Ensure the Jar exists (or create it if missing)
+                jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
+
+                #  2.a.ii) Find the existing PatchJar for (this patch, this jar),
+                #            so we can pull its “version” field:
+                try:
+                    patch_jar = PatchJar.objects.get(patch=patch, jar=jar_obj)
+                except PatchJar.DoesNotExist:
+                    # If there is no PatchJar row yet, we can either:
+                    #  • create a default one with version = None, or skip.
+                    patch_jar = PatchJar.objects.create(patch=patch, jar=jar_obj, version=None, remarks="")
+                
+                #  2.a.iii) Now, upsert the PatchProductJar row.
+                defaults = {}
+
+                # If the payload sent “curr_version”, overwrite current_version:
+                if "curr_version" in jar_data:
+                    defaults["current_version"] = jar_data.get("curr_version")
+                else:
+                    # Optionally: do nothing, leave existing current_version alone.
+                    pass
+
+                # Always set “version” from the PatchJar row (so they stay in sync):
+                # defaults["version"] = patch_jar.version
+
+                # If payload sent “updated” or “remarks”, copy them over:
+                if "updated" in jar_data:
+                    defaults["updated"] = jar_data["updated"]
+                if "remarks" in jar_data:
+                    defaults["remarks"] = jar_data["remarks"]
+
+                # Upsert PatchProductJar:
+                ppj, created = PatchProductJar.objects.update_or_create(
+                    patch_jar_id=patch_jar,  # this is a ForeignKey to PatchJar
+                    product=product,
+                    defaults=defaults
+                )
+                # At this point, you have either created or updated the (
+                #    patch_jar_id = patch_jar, product = product
+                # ) row, with default values set above.
+
+            #
+            # 2.b) Process “images” for this (patch, product)
+            #      (update Image fields, PatchImage fields, and attach SecurityIssues)
+
+            for img_data in prod_data.get("images", []):
+                image_name = img_data.get("image_name")
+                if not image_name:
+                    continue
+
+                #  2.b.i) Try to fetch an existing Image for this product
+                try:
+                    # image = Image.objects.get(image_name=image_name, product=product)
+                    image = Image.objects.get(image_name=image_name, build_number=patch_name)
+                    # Overwrite only the fields they provided:
+                    # if "build_number" in img_data:
+                    #     image.build_number = img_data["build_number"]
+                    if "twistlock_report_url" in img_data:
+                        image.twistlock_report_url = img_data["twistlock_report_url"]
+                    if "twistlock_report_clean" in img_data:
+                        image.twistlock_report_clean = img_data["twistlock_report_clean"]
+                    image.save()
+                except Image.DoesNotExist:
+                    # If no existing Image, create one with defaults
+                    create_kwargs = {
+                        "product": product,
+                        "image_name": image_name,
+                        "build_number": img_data.get("patch_name", ""),
+                        "twistlock_report_url": img_data.get("twistlock_report_url", ""),
+                        "twistlock_report_clean": img_data.get("twistlock_report_clean", True),
+                    }
+                    image = Image.objects.create(**create_kwargs)
+
+                #
+                #  2.b.ii) Upsert nested SecurityIssue rows if any were sent
+                #
+                if "security_issues" in img_data:
+                    issue_objs = []
+                    for issue_data in img_data["security_issues"]:
+                        # We match or create by the four fields (cve_id, cvss_score, severity, affected_libraries).
+                        # After creating/fetching, we will attach it to image.security_issues M2M.
+                        cve_id = issue_data.get("cve_id")
+                        cvss_score = issue_data.get("cvss_score")
+                        severity = issue_data.get("severity")
+                        affected_libraries = issue_data.get("affected_libraries")
+
+                        if not (cve_id and cvss_score is not None and severity and affected_libraries):
+                            # Skip incomplete entries
+                            continue
+
+                        # Build the “lookup” dict (the four‐field key) and “defaults” dict for any extra fields:
+                        lookup = {
+                            "cve_id": cve_id,
+                            "cvss_score": cvss_score,
+                            "severity": severity,
+                            "affected_libraries": affected_libraries
+                        }
+                        defaults = {
+                            "library_path": issue_data.get("library_path", ""),
+                            "description": issue_data.get("description", "Security issue description"),
+                            "is_deleted": False,
+                        }
+
+                        issue_obj, _ = SecurityIssue.objects.update_or_create(
+                            **lookup,
+                            defaults=defaults
+                        )
+                        issue_objs.append(issue_obj)
+
+                    # Replace the image’s M2M set with exactly what they sent:
+                    image.security_issues.set(issue_objs)
+
+                #
+                #  2.b.iii) Upsert (patch, image) → PatchImage, only on the fields given
+                #
+                patch_image_defaults = {}
+                if "ot2_pass" in img_data:
+                    patch_image_defaults["ot2_pass"] = img_data["ot2_pass"]
+                if "registry" in img_data:
+                    patch_image_defaults["registry"] = img_data["registry"]
+                # if "helm_charts" in img_data:
+                #     patch_image_defaults["helm_charts"] = img_data["helm_charts"]
+                if "build_number" in img_data:
+                    patch_image_defaults["patch_build_number"] = img_data["build_number"]
+
+                if patch_image_defaults:
+                    # update_or_create PatchImage row for (patch, image)
+                    PatchImage.objects.update_or_create(
+                        patch=patch,
+                        image=image,
+                        defaults=patch_image_defaults
+                    )
+                # If no patch_image_defaults were provided, we leave any existing PatchImage untouched.
+
+            # 2.c) Upsert PatchProductHelmChart
+            helm_val = prod_data.get("helm_charts", None)
+            if helm_val is not None:
+                PatchProductHelmChart.objects.update_or_create(
+                    patch=patch,
+                    product=product,
+                    defaults={"helm_charts": helm_val}
+                )
+        # End of “for each product” loop
 
     return Response({"status": "success"}, status=status.HTTP_200_OK)
 
