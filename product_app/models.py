@@ -147,6 +147,8 @@ class Image(models.Model):
     twistlock_report_url = models.URLField(default=defaults['image']['twistlock_report_url'], null=True, blank=True)
     twistlock_report_clean = models.BooleanField(default=True, null=True, blank=True)
     security_issues = models.ManyToManyField(SecurityIssue, related_name='images', blank=True)
+    size = models.CharField(max_length=255, null=True, blank=True)
+    layers = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
     is_deleted = models.BooleanField(default=False)
