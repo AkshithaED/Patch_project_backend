@@ -5,7 +5,7 @@ from .views import (
     ReleaseViewSet, ProductViewSet, ImageViewSet,
     SecurityIssueViewSet, PatchViewSet, JarViewSet,
     HighLevelScopeViewSet, patch_completion_percentage,patch_product_completion_status, update_patch_data, 
-    patch_product_jars_list, update_patch_product_jar
+    patch_product_jars_list, update_patch_product_jar, build_image_url_endpoint
 )
 
 release_list = ReleaseViewSet.as_view({
@@ -112,4 +112,5 @@ urlpatterns = [
     path('high-level-scopes/<str:name>/', high_level_scope_detail, name='high-level-scope-detail'),
     path('patchproductjars/<str:patch_name>/<str:product_name>/', patch_product_jars_list),
     path('patchproductjars/<str:patch_name>/<str:product_name>/<str:jar_name>/', update_patch_product_jar),
+    path('build-image-url/', build_image_url_endpoint, name='build-image-url'),
 ]

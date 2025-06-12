@@ -5,6 +5,7 @@ from .models import Release, Patch, Product, Image, Jar, HighLevelScope, Securit
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
+from .data import PATCH_DATA, build_image_url
 
 
 class ReleaseViewSet(viewsets.ModelViewSet):
@@ -471,3 +472,34 @@ def update_patch_product_jar(request, patch_name, product_name, jar_name):
             {"error": "No updatable fields ('remarks' or 'updated') provided."},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+
+#api for getting path
+@api_view(['POST'])
+def build_image_url_endpoint(request):
+    payload = request.data
+    # Validate presence of the four keys
+    for key in ("release", "product", "image", "registry"):
+        if key not in payload:
+            return Response(
+                {"error": f"Missing '{key}'"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    rel     = payload["release"]
+    prod    = payload["product"]
+    img     = payload["image"]
+    registry= payload["registry"]
+
+    try:
+        # 1) Fetch the entry from the nested dict:
+        server_entry = PATCH_DATA[rel][prod][img][registry]
+    except KeyError:
+        return Response(
+            {"error": "No entry found for the given keys in PATCH_DATA."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 2) Call your URL‐builder and return its result
+    url_payload = build_image_url(server_entry)
+    return Response(url_payload, status=status.HTTP_200_OK)
