@@ -53,7 +53,7 @@ class ImageSerializer(serializers.ModelSerializer):
         fields = [
             'product', 'image_name', 'build_number', 'release_date',
             'twistlock_report_url', 'twistlock_report_clean',
-            'created_at', 'updated_at', 'is_deleted',
+            'created_at', 'updated_at', 'is_deleted', 'size', 'layers',
             # both of these together:
             'security_issues',     # read nested
             'security_issue_ids',  # write only
