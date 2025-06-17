@@ -280,10 +280,10 @@ def update_patch_data(request):
                     for issue_data in img_data["security_issues"]:
                         # We match or create by the four fields (cve_id, cvss_score, severity, affected_libraries).
                         # After creating/fetching, we will attach it to image.security_issues M2M.
-                        cve_id = issue_data.get("cve_id")
-                        cvss_score = issue_data.get("cvss_score")
-                        severity = issue_data.get("severity")
-                        affected_libraries = issue_data.get("affected_libraries")
+                        cve_id = issue_data.get("CVE")
+                        cvss_score = issue_data.get("cvss")
+                        severity = issue_data.get("Severity")
+                        affected_libraries = issue_data.get("PackageName")
 
                         if not (cve_id and cvss_score is not None and severity and affected_libraries):
                             # Skip incomplete entries
@@ -298,7 +298,7 @@ def update_patch_data(request):
                         }
                         defaults = {
                             "library_path": issue_data.get("library_path", ""),
-                            "description": issue_data.get("description", "Security issue description"),
+                            "description": issue_data.get("Description", ""),
                             "is_deleted": False,
                         }
 
