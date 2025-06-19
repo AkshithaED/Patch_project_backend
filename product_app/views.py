@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
@@ -503,3 +503,13 @@ def build_image_url_endpoint(request):
     # 2) Call your URL‐builder and return its result
     url_payload = build_image_url(server_entry)
     return Response(url_payload, status=status.HTTP_200_OK)
+
+
+
+def product_jar_release_list(request):
+    data = ProductJarRelease.objects.all()
+    return render(request, 'product_jar_release_list.html', {'data': data})
+
+def release_product_image_list(request):
+    data = ReleaseProductImage.objects.all()
+    return render(request, 'release_product_image_list.html', {'data': data})

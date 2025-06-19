@@ -247,6 +247,12 @@ class Patch(models.Model):
     client_build_availability = models.DateField()
     description = models.TextField()
     # patch_version = models.CharField(max_length=50)
+
+    kba = models.CharField(max_length=500, blank=True)
+    functional_fixes = models.CharField(max_length=500, blank=True)
+    security_issues = models.CharField(max_length=500, blank=True)
+
+
     patch_state = models.CharField(max_length=20, choices=PATCH_STATE_CHOICES, default='new')
     
     products = models.ManyToManyField(
@@ -365,3 +371,47 @@ class ProductSecurityIssue(models.Model):
     
     class Meta:
         unique_together = ('patch', 'product', 'security_issue')  # UPDATED
+
+# -----------------------
+# ProductJarRelease Model
+# -----------------------
+class ProductJarRelease(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    jar = models.CharField(max_length=255)
+    release = models.ForeignKey(Release, on_delete=models.CASCADE)
+    path = models.CharField(max_length=500)
+
+    class Meta:
+        unique_together = ('product', 'jar', 'release')
+
+    def __str__(self):
+        return f"{self.product.name} - {self.jar.name} - {self.release.name}"
+
+# -----------------------
+# ProductImageRelease Model
+# -----------------------
+class ReleaseProductImage(models.Model):
+    release = models.CharField(max_length=50)         
+    product = models.CharField(max_length=100)         
+    image_name = models.CharField(max_length=255)      
+
+    # Registry source
+    registry_registry = models.URLField()
+    registry_path = models.CharField(max_length=255, blank=True)
+    registry_image_name = models.CharField(max_length=255)
+
+    # ot2paas source
+    ot2paas_registry = models.URLField()
+    ot2paas_path = models.CharField(max_length=255, blank=True)
+    ot2paas_image_name = models.CharField(max_length=255)
+
+    # Local source
+    local_registry = models.URLField()
+    local_path = models.CharField(max_length=255, blank=True)
+    local_image_name = models.CharField(max_length=255)
+
+    class Meta:
+        unique_together = ('release', 'product', 'image_name')
+
+    def __str__(self):
+        return f"{self.release} - {self.product} - {self.image_name}"
