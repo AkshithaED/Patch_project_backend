@@ -198,6 +198,7 @@ class PatchSerializer(serializers.ModelSerializer):
             'name', 'release', 'release_date', 'kick_off', 'code_freeze',
             'platform_qa_build', 'client_build_availability',
             'description', 'patch_state',
+            'kba', 'functional_fixes', 'security_issues', 
             # through-model read
             'jars', 'scopes',
             # write-only inputs

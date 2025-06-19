@@ -5,7 +5,8 @@ from django.utils import timezone
 from .models import (
     CustomUser, Release, Patch, Product,
     Image, SecurityIssue, Jar, HighLevelScope,
-    PatchProductImage, PatchHighLevelScope, PatchJar
+    PatchProductImage, PatchHighLevelScope, PatchJar,ProductJarRelease, ReleaseProductImage
+
 )
 from .forms import CustomUserCreationForm, CustomUserChangeForm, PatchAdminForm
 
@@ -172,3 +173,17 @@ class PatchProductImageAdmin(admin.ModelAdmin):
     list_display = ('patch', 'product', 'image')
     list_filter = ('patch__name', 'product__name')
     search_fields = ('patch__name', 'product__name', 'image__image_name')
+
+
+@admin.register(ProductJarRelease)
+class ProductJarReleaseAdmin(admin.ModelAdmin):
+    list_display = ['product', 'jar', 'release', 'path']  # Adjust fields as needed
+
+@admin.register(ReleaseProductImage)
+class ReleaseProductImageAdmin(admin.ModelAdmin):
+    list_display = [
+        'release', 'product', 'image_name',
+        'registry_registry', 'registry_image_name',
+        'ot2paas_registry', 'ot2paas_path', 'ot2paas_image_name',
+        'local_registry', 'local_path', 'local_image_name',
+    ]
