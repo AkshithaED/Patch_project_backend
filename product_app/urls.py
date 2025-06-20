@@ -5,7 +5,7 @@ from .views import (
     ReleaseViewSet, ProductViewSet, ImageViewSet,
     SecurityIssueViewSet, PatchViewSet, JarViewSet,
     HighLevelScopeViewSet, patch_completion_percentage,patch_product_completion_status, update_patch_data, 
-    patch_product_jars_list, update_patch_product_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list
+    patch_product_jars_list, update_patch_product_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,PatchProductDetailView
 
 )
 
@@ -116,4 +116,6 @@ urlpatterns = [
     path('build-image-url/', build_image_url_endpoint, name='build-image-url'),
     path('product-jar-releases/', product_jar_release_list, name='product_jar_release_list'),
     path('release-product-images/', release_product_image_list, name='release_product_image_list'),
+    path("patches/<str:patch_name>/products/<str:product_name>/", PatchProductDetailView.as_view(), name="patch-product-detail")
+
 ]
