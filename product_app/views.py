@@ -1,11 +1,13 @@
 from rest_framework.response import Response
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from .data import PATCH_DATA, build_image_url
+from rest_framework.views import APIView
+
 
 
 class ReleaseViewSet(viewsets.ModelViewSet):
@@ -513,3 +515,102 @@ def product_jar_release_list(request):
 def release_product_image_list(request):
     data = ReleaseProductImage.objects.all()
     return render(request, 'release_product_image_list.html', {'data': data})
+
+
+class PatchProductDetailView(APIView):
+    def get(self, request, patch_name, product_name):
+        try:
+            patch = get_object_or_404(Patch, name=patch_name)
+
+            # Get product within the patch
+            product = patch.products.filter(name__iexact=product_name).first()
+            if not product:
+                return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            # 🔸 Get PatchProductHelmChart data
+            helm_chart_obj = PatchProductHelmChart.objects.filter(patch=patch, product=product).first()
+            helm_charts = helm_chart_obj.helm_charts if helm_chart_obj else []
+
+            # Get ProductSecurityIssue description
+            psi_obj = ProductSecurityIssue.objects.filter(patch=patch, product=product).first()
+            product_security_des = psi_obj.product_security_des if psi_obj else None
+
+            #  Get all images with patch-specific fields
+            patch_images = PatchImage.objects.filter(patch=patch)
+            image_data = []
+
+            for pi in patch_images:
+                img = pi.image
+
+                # Ensure the image is for the current product
+                if img.product == product:
+                    image_data.append({
+                        "product": product.name,
+                        "image_name": img.image_name,
+                        "build_number": img.build_number,
+                        "release_date": img.release_date,
+                        "twistlock_report_url": img.twistlock_report_url,
+                        "twistlock_report_clean": img.twistlock_report_clean,
+                        "created_at": img.created_at,
+                        "updated_at": img.updated_at,
+                        "is_deleted": img.is_deleted,
+                        "size": img.size,
+                        "layers": img.layers,
+                        "security_issues": [
+                            {
+                                "id": si.id,
+                                "cve_id": si.cve_id,
+                                "cvss_score": si.cvss_score,
+                                "severity": si.severity,
+                                "affected_libraries": si.affected_libraries,
+                                "library_path": si.library_path,
+                                "description": si.description,
+                                "created_at": si.created_at,
+                                "updated_at": si.updated_at,
+                                "is_deleted": si.is_deleted
+                            }
+                            for si in img.security_issues.all()
+                        ],
+
+                        "registry": pi.registry,
+                        "patch_build_number": pi.patch_build_number,
+                        "ot2_pass": pi.ot2_pass,
+                    })
+                                
+            # Get patch-specific JARs
+            jars = []
+            ppj_qs = PatchProductJar.objects.filter(
+                patch_jar_id__patch_id=patch.name,
+                product=product
+            ).select_related('patch_jar_id__jar')
+
+            for ppj in ppj_qs:
+                pj = ppj.patch_jar_id
+                jars.append({
+                    "name": pj.jar.name,
+                    "version": pj.version,
+                    "current_version": ppj.current_version,
+                    "remarks": ppj.remarks,
+                    "updated": ppj.updated,
+                })
+
+
+
+        
+
+            #  Final product data
+            product_data = {
+                "name": product.name,
+                "images": image_data,
+                "helm_charts": helm_charts,
+                "jars": jars, 
+                "status": product.status,
+                "product_security_des": product_security_des,
+                "created_at": product.created_at,
+                "updated_at": product.updated_at,
+                "is_deleted": product.is_deleted
+            }
+            return Response(product_data, status=status.HTTP_200_OK)
+
+        except Patch.DoesNotExist:
+            return Response({"error": "Patch not found"}, status=status.HTTP_404_NOT_FOUND)
