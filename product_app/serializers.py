@@ -490,7 +490,17 @@ class PatchSerializer(serializers.ModelSerializer):
                         if (cve_id := issue.get('cve_id')):
                             description = issue.get('product_security_des')
                             try:
-                                security_issue_obj = SecurityIssue.objects.get(cve_id=cve_id)
+                                # security_issue_obj = SecurityIssue.objects.get(cve_id=cve_id)
+                                security_issue_obj = SecurityIssue.objects.filter(
+                                    cve_id=cve_id,
+                                    images__product=product_obj,
+                                    images__patchproductimage__patch=patch # This makes it even more specific to the patch
+                                ).distinct().first() 
+
+                                if not security_issue_obj:
+                                    # This CVE is not associated with this product in this patch. 
+                                    print(f"Warning: Could not find SecurityIssue {cve_id} for product {product_obj.name} in patch {patch.name}")
+                                    continue
                                 ProductSecurityIssue.objects.update_or_create(
                                     patch=patch, product=product_obj, security_issue=security_issue_obj,
                                     defaults={'product_security_des': description}
