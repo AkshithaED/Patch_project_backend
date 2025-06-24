@@ -24,23 +24,50 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+# 1. New serializer for Security Issues to include the patch-specific description.
+#    It replaces the old 'ProductSecurityIssueSerializer'.
+class PatchContextSecurityIssueSerializer(serializers.ModelSerializer):
+    """
+    Serializes a SecurityIssue and adds 'product_security_des' from the
+    through-model 'ProductSecurityIssue' based on the patch/product context.
+    """
+    product_security_des = serializers.SerializerMethodField()
 
-class ProductSecurityIssueSerializer(serializers.ModelSerializer):
     class Meta:
         model = SecurityIssue
         fields = [
             "cve_id", "cvss_score", "severity", "affected_libraries",
             "library_path", "description",
-            "created_at", "updated_at", "is_deleted"
+            "created_at", "updated_at", "is_deleted",
+            "product_security_des"  # The new field
         ]
 
+    def get_product_security_des(self, obj):
+        # 'obj' is the SecurityIssue instance.
+        # We retrieve the patch and product from the context passed down.
+        patch = self.context.get('patch')
+        product = self.context.get('product')
+
+        if not patch or not product:
+            return ""
+
+        try:
+            psi = ProductSecurityIssue.objects.get(
+                patch=patch,
+                product=product,
+                security_issue=obj
+            )
+            return psi.product_security_des
+        except ProductSecurityIssue.DoesNotExist:
+            return ""
 
 
+# 2. Updated ImageSerializer to use the new security issue serializer.
 class ImageSerializer(serializers.ModelSerializer):
-    # 1) Nested, read-only display of full SecurityIssue objects
-    security_issues = SecurityIssueSerializer(many=True, read_only=True)
+    # Use the new serializer that includes 'product_security_des'
+    security_issues = PatchContextSecurityIssueSerializer(many=True, read_only=True)
 
-    # 2) Write-only field to accept CVE IDs when posting/patching
+    # Write-only field remains the same
     security_issue_ids = serializers.SlugRelatedField(
         many=True,
         write_only=True,
@@ -54,13 +81,12 @@ class ImageSerializer(serializers.ModelSerializer):
             'product', 'image_name', 'build_number', 'release_date',
             'twistlock_report_url', 'twistlock_report_clean',
             'created_at', 'updated_at', 'is_deleted', 'size', 'layers',
-            # both of these together:
-            'security_issues',     # read nested
-            'security_issue_ids',  # write only
+            'security_issues',
+            'security_issue_ids',
         ]
 
+    # create/update methods remain the same as they handle the direct M2M
     def create(self, validated_data):
-        # Pop off the IDs, then assign normally
         issue_ids = validated_data.pop('security_issue_ids', [])
         image = super().create(validated_data)
         image.security_issues.set(issue_ids)
@@ -74,46 +100,69 @@ class ImageSerializer(serializers.ModelSerializer):
         return image
 
 
+# 3. Refactored ProductSerializer to handle its own nested data composition.
 class ProductSerializer(serializers.ModelSerializer):
-    images = ImageSerializer(many=True, read_only=True)
-        # security_issues = serializers.SerializerMethodField()
-    product_security_des = serializers.SerializerMethodField()  # Add this line
+    images = serializers.SerializerMethodField()
+    helm_charts = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = [
-            'name', 'images', 'status', 'created_at', 'updated_at', 
-            'is_deleted', 'product_security_des'
+            'name', 'images', 'status', 'created_at', 'updated_at',
+            'is_deleted', 'helm_charts'
         ]
 
-    def get_security_issues(self, obj):
+    def get_helm_charts(self, obj):
+        # 'obj' is the Product instance
+        patch = self.context.get('patch')
+        if not patch:
+            return None
+        try:
+            helm_entry = PatchProductHelmChart.objects.get(patch=patch, product=obj)
+            return helm_entry.helm_charts
+        except PatchProductHelmChart.DoesNotExist:
+            return None
+
+    def get_images(self, obj):
+        # 'obj' is the Product instance
         patch = self.context.get('patch')
         if not patch:
             return []
 
-        security_issues_qs = SecurityIssue.objects.filter(
-            productsecurityissue__product=obj,
-            productsecurityissue__patch=patch,
+        # Filter images for this product that belong to the current patch
+        images_for_patch = obj.images.filter(
+            build_number=patch.name,
             is_deleted=False
-        ).distinct()
-
-        serializer = ProductSecurityIssueSerializer(
-            security_issues_qs,
-            many=True,
-            context={'product': obj, 'patch': patch}
         )
-        return serializer.data
 
-    def get_product_security_des(self, obj):
-        patch = self.context.get('patch')
-        if not patch:
-            return ""
+        # Build a new context for the ImageSerializer to have access to the product
+        new_context = self.context.copy()
+        new_context['product'] = obj
 
-        psi = ProductSecurityIssue.objects.filter(product=obj, patch=patch).first()
-        if psi:
-            return psi.product_security_des
-        return ""
+        # Serialize the filtered images using the updated context
+        images_data = ImageSerializer(
+            images_for_patch, many=True, context=new_context
+        ).data
 
+        # Inject additional patch-specific data into each image object
+        for image_data in images_data:
+            try:
+                patch_image = PatchImage.objects.get(
+                    patch=patch,
+                    image__image_name=image_data['image_name'],
+                    image__product=obj
+                )
+                image_data.update({
+                    "ot2_pass": patch_image.ot2_pass,
+                    "registry": patch_image.registry,
+                    "patch_build_number": patch_image.patch_build_number,
+                })
+            except PatchImage.DoesNotExist:
+                # Ensure fields are present even if no PatchImage record exists
+                image_data.update({
+                    "ot2_pass": None, "registry": None, "patch_build_number": None
+                })
+        return images_data
 
 class PatchJarSerializer(serializers.ModelSerializer):
     name    = serializers.CharField(source='jar.name', read_only=True)
@@ -167,372 +216,233 @@ class ProductNestedSerializer(serializers.Serializer):
     images = PatchImageNestedSerializer(many=True)
 
 
+# --- MAIN PATCH SERIALIZER ---
 class PatchSerializer(serializers.ModelSerializer):
-    # — read‐only through-model views —
-    jars   = PatchJarSerializer(
-                 source='patchjar_set', many=True, read_only=True
-             )
-    scopes = PatchHighLevelScopeSerializer(
-                 source='patchhighlevelscope_set', many=True, read_only=True
-             )
+    jars = PatchJarSerializer(source='patchjar_set', many=True, read_only=True)
+    scopes = PatchHighLevelScopeSerializer(source='patchhighlevelscope_set', many=True, read_only=True)
 
-    # — write‐only payloads —
-    jars_data     = serializers.ListField(
-                        child=serializers.DictField(), write_only=True
-                    )
-    scopes_data   = serializers.ListField(
-                        child=serializers.DictField(), write_only=True
-                    )
-    # products_data = serializers.ListField(
-    #                     child=serializers.DictField(), write_only=True
-    #                 )
+    jars_data = serializers.ListField(child=serializers.DictField(), write_only=True)
+    scopes_data = serializers.ListField(child=serializers.DictField(), write_only=True)
     products_data = ProductNestedSerializer(many=True, write_only=True)
 
-
-    # — read‐only nested output —
     products = serializers.SerializerMethodField()
 
     class Meta:
-        model  = Patch
+        model = Patch
         fields = [
             'name', 'release', 'release_date', 'kick_off', 'code_freeze',
             'platform_qa_build', 'client_build_availability',
             'description', 'patch_state',
-            'kba', 'functional_fixes', 'security_issues', 
-            # through-model read
+            'kba', 'functional_fixes', 'security_issues',
             'jars', 'scopes',
-            # write-only inputs
             'jars_data', 'scopes_data', 'products_data',
-            # nested products read
             'products',
         ]
         lookup_field = 'name'
         extra_kwargs = {
-            'jars_data':     {'required': True},
-            'scopes_data':   {'required': True},
+            'jars_data': {'required': True},
+            'scopes_data': {'required': True},
             'products_data': {'required': True},
         }
 
     def create(self, validated_data):
-        # 1) Extract all three payloads
-        jars_payload     = validated_data.pop('jars_data', [])
-        scopes_payload   = validated_data.pop('scopes_data', [])
+        jars_payload = validated_data.pop('jars_data', [])
+        scopes_payload = validated_data.pop('scopes_data', [])
         products_payload = validated_data.pop('products_data', [])
         initial_products_data = self.initial_data.get('products_data', [])
 
-        # 2) Create the Patch record
         patch = super().create(validated_data)
-        print("Received products_data in create:", products_payload)
 
+        # Create Products, Images, and Helm Charts from validated data
         for pd in products_payload:
-            pkg, created = Product.objects.get_or_create(
-                name=pd['name'],
-                defaults={
-                    # Add other default fields here if needed, e.g.:
-                    # 'description': pd.get('description', ''),
-                    # 'status': 'active',
-                }
-            )
+            pkg, _ = Product.objects.get_or_create(name=pd['name'])
             patch.products.add(pkg)
-            # Save helm_charts for the product if provided
-            helm_charts_value = pd.get('helm_charts')
-            if helm_charts_value is not None:
+            if (helm_charts_value := pd.get('helm_charts')) is not None:
                 PatchProductHelmChart.objects.update_or_create(
-                    patch=patch,
-                    product=pkg,
-                    defaults={"helm_charts": helm_charts_value}
+                    patch=patch, product=pkg, defaults={"helm_charts": helm_charts_value}
                 )
-
 
             for img_dict in pd['images']:
                 img_name = img_dict.get('image_name')
-                existing_img = Image.objects.filter(image_name=img_name).first()
-
-                if existing_img:
-                    # Always create a new image with fresh twistlock fields
-                    img, created = Image.objects.get_or_create(
-                        product=pkg,
-                        image_name=img_name,
-                        build_number=patch.name,
-                        defaults={
-                            'release_date': patch.release_date,
-                            "is_deleted": False,
-                            "twistlock_report_url": None,
-                            "twistlock_report_clean": None,
-                        }
-                    )
-                    if not created:
-                        img.twistlock_report_url = None
-                        img.twistlock_report_clean = None
-                        img.is_deleted = False
-                        img.save()
-
-                else:
-                    # New image – also ensure twistlock fields are null
-                    img = Image.objects.create(
-                        product=pkg,
-                        image_name=img_name,
-                        build_number=patch.name,
-                        release_date= patch.release_date ,
-                        twistlock_report_url=None,
-                        twistlock_report_clean=None,
-                        is_deleted=False,
-                    )
-
-
-                # Create PatchProductImage (basic linking)
-                PatchProductImage.objects.get_or_create(
-                    patch=patch,
+                  # Use get_or_create to AVOID overwriting existing Twistlock data.
+                img, created = Image.objects.get_or_create(
                     product=pkg,
-                    image=img
-                )
-
-                # Create or update PatchImage with extra patch-specific fields
-                PatchImage.objects.update_or_create(
-                    patch=patch,
-                    image=img,
+                    image_name=img_name,
+                    build_number=patch.name,
                     defaults={
-                        'ot2_pass': img_dict.get('ot2_pass'),
-                        'registry': img_dict.get('registry'),
+                        'release_date': patch.release_date,
+                        'is_deleted': False,
+                        # Defaults only apply on CREATION.
+                        'twistlock_report_url': None,
+                        'twistlock_report_clean': None,
+                    }
+                )
+                # If the image already existed but was marked as deleted, un-delete it.
+                if not created and img.is_deleted:
+                    img.is_deleted = False
+                    img.save(update_fields=['is_deleted'])
+
+                PatchProductImage.objects.get_or_create(patch=patch, product=pkg, image=img)
+                PatchImage.objects.update_or_create(
+                    patch=patch, image=img,
+                    defaults={
+                        'ot2_pass': img_dict.get('ot2_pass'), 'registry': img_dict.get('registry'),
                         'patch_build_number': img_dict.get('patch_build_number'),
                     }
                 )
-                print("initial_products_data",initial_products_data)
 
+        # 4. Process security issues from the raw initial data payload
         for pd_raw in initial_products_data:
             pkg = Product.objects.get(name=pd_raw['name'])
-            product_security_des = pd_raw.get('product_security_des') 
             for img_dict in pd_raw.get('images', []):
                 for issue in img_dict.get('security_issues', []):
                     cve_id = issue.get('cve_id')
-                    # product_security_des = issue.get('product_security_des')
+                    # UPDATED: Get description from the issue object itself
+                    product_security_des = issue.get('product_security_des')
 
                     if cve_id:
-                        # Here you can get_or_create SecurityIssue safely
-                        print(f"Fetching SecurityIssue with cve_id: '{cve_id}'")
-
-                        security_issue_obj, created = SecurityIssue.objects.get_or_create(
+                        security_issue_obj, _ = SecurityIssue.objects.get_or_create(
                             cve_id=cve_id,
                             defaults={
-                                'cvss_score': issue.get('cvss_score'),
-                                'severity': issue.get('severity'),
+                                'cvss_score': issue.get('cvss_score'), 'severity': issue.get('severity'),
                                 'affected_libraries': issue.get('affected_libraries'),
-                                'library_path': issue.get('library_path'),
-                                'description': issue.get('description'),
+                                'library_path': issue.get('library_path'), 'description': issue.get('description'),
                                 'is_deleted': issue.get('is_deleted', False),
                             }
                         )
-                    print("Before update_or_create call")
-                    print(f"Patch pk: {patch.pk}, Product pk: {pkg.pk}, SecurityIssue pk: {security_issue_obj.pk}")
-                    try:
-                        psi_obj, created = ProductSecurityIssue.objects.update_or_create(
-                            patch=patch,
-                            product=pkg,
-                            security_issue=security_issue_obj,
+                        # Create the through-model link with the description
+                        ProductSecurityIssue.objects.update_or_create(
+                            patch=patch, product=pkg, security_issue=security_issue_obj,
                             defaults={'product_security_des': product_security_des}
                         )
-                        print(f"PSI {'created' if created else 'updated'}: {psi_obj}")
-                    except Exception as e:
-                        print("Error in update_or_create:", e)
 
+        # Process Jars and Scopes (unchanged)
         for jd in jars_payload:
-            jar_obj, _ = Jar.objects.get_or_create(
-                name=jd['name'],
-                # defaults={'version': jd.get('version')}
-            )
-            # update existing or create new PatchJar row
+            jar_obj, _ = Jar.objects.get_or_create(name=jd['name'])
             PatchJar.objects.update_or_create(
-                patch=patch,
-                jar=jar_obj,
-                defaults={'version': jd.get('version', None),
-                'remarks': jd.get('remarks', '')}
+                patch=patch, jar=jar_obj, defaults={'version': jd.get('version'), 'remarks': jd.get('remarks', '')}
             )
-
-        # 5) Link scopes + remarks
         for sd in scopes_payload:
-            scope_obj, _ = HighLevelScope.objects.get_or_create(
-                name=sd['name'],
-                # defaults={'version': sd.get('version')}
-            )
-            # update existing or create new through‐row
+            scope_obj, _ = HighLevelScope.objects.get_or_create(name=sd['name'])
             PatchHighLevelScope.objects.update_or_create(
-                patch=patch,
-                scope=scope_obj,
-                defaults={'version': sd.get('version', None),
-                'remarks': sd.get('remarks', '')}
+                patch=patch, scope=scope_obj, defaults={'version': sd.get('version'), 'remarks': sd.get('remarks', '')}
             )
-
         return patch
+
+  # In class PatchSerializer:
+# ... keep the 'create' and 'get_products' methods as they are ...
 
     def update(self, instance, validated_data):
-        # 1) Pop payloads if present
-        jars_payload     = validated_data.pop('jars_data', None)
-        scopes_payload   = validated_data.pop('scopes_data', None)
+        # Pop all potential payloads.
+        jars_payload = validated_data.pop('jars_data', None)
+        scopes_payload = validated_data.pop('scopes_data', None)
         products_payload = validated_data.pop('products_data', None)
-        # products_payload = self.initial_data.get('products_data', [])
 
-        # 2) Update the Patch fields
-        patch = super().update(instance, validated_data)
-
-        # 3) If products_data sent, clear & re-create
-        if products_payload is not None:
-            patch.products.clear()
-
-            for pd in products_payload:
-                pkg, created = Product.objects.get_or_create(
-                    name=pd['name'],
-                    defaults={
-                        # Add other default fields here if needed
-                    }
-                )
-                patch.products.add(pkg)
-                # Update helm_charts if provided
-                helm_charts_value = pd.get('helm_charts')
-                if helm_charts_value is not None:
-                    PatchProductHelmChart.objects.update_or_create(
-                        patch=patch,
-                        product=pkg,
-                        defaults={"helm_charts": helm_charts_value}
-                    )
-
-
-
-                for img_dict in pd['images']:
-                    img_name = img_dict.get('image_name')
-                    # if not img_name:
-                    #     raise serializers.ValidationError(f"Missing or empty 'image_name' for product '{pd['name']}'")
-
-                    # ✅ Now img is only set if img_name is valid
-                    existing_img = Image.objects.filter(image_name=img_name).first()
-
-                    if existing_img and existing_img.build_number != patch.name:
-                        # Create new image with new build_number
-                        img, created = Image.objects.get_or_create(
-                            product=pkg,
-                            image_name=img_name,
-                            build_number=patch.name,
-                            defaults={
-                                'is_deleted': False,
-                                'release_date': patch.release_date 
-                            }
-                        )
-                        img.twistlock_report_url = None
-                        img.twistlock_report_clean = None
-                        img.save()
-
-                    elif existing_img and existing_img.build_number == patch.name:
-                        # Use the existing one, update if needed
-                        existing_img.is_deleted = False
-                        existing_img.save()
-                        img = existing_img
-
-                    else:
-                        # No existing image at all – ensure twistlock fields are null
-                        img = Image.objects.create(
-                            product=pkg,
-                            image_name=img_name,
-                            build_number=patch.name,
-                            release_date= patch.release_date,
-                            is_deleted=False,
-                            twistlock_report_url=None,
-                            twistlock_report_clean=None
-                        )
-
-
-                    # Link product image to patch
-                    PatchProductImage.objects.update_or_create(
-                        patch=patch,
-                        product=pkg,
-                        image=img
-                    )
-
-                    # Create or update PatchImage with the provided metadata
-                    PatchImage.objects.update_or_create(
-                        patch=patch,
-                        image=img,
-                        defaults={
-                            'ot2_pass': img_dict.get('ot2_pass'),
-                            'registry': img_dict.get('registry'),
-                            'patch_build_number': img_dict.get('patch_build_number'),
-                        }
-                    )
-
+        # Get the raw request data, which is our single source of truth for user intent.
         products_initial = self.initial_data.get('products_data', [])
 
-        for pd_raw in products_initial:
-            try:
-                pkg = Product.objects.get(name=pd_raw['name'])
-            except Product.DoesNotExist:
-                continue  # or handle error
-            product_security_des = pd_raw.get('product_security_des') 
+        # Update the simple fields on the Patch model itself.
+        patch = super().update(instance, validated_data)
 
-            for img_dict in pd_raw.get('images', []):
-                for issue in img_dict.get('security_issues', []):
-                    cve_id = issue.get('cve_id')
-                    # product_security_des = issue.get('product_security_des')
+        # --- SMART LOGIC: Determine User's Intent ---
+        is_structural_change = False
+        if products_initial:
+            # Check if the payload indicates a structural change.
+            # A structural change means adding/removing products or images,
+            # or changing fields like 'helm_charts' or 'image_name'.
+            # A detail-only update will typically only contain 'name' and nested 'security_issues'.
+            for pd_raw in products_initial:
+                if "helm_charts" in pd_raw or "images" not in pd_raw:
+                    is_structural_change = True
+                    break
+                for img_dict in pd_raw.get("images", []):
+                    # If an image dict has more than just 'security_issues' it's a structural change.
+                    if any(key not in ['security_issues', 'image_name'] for key in img_dict):
+                         is_structural_change = True
+                         break
+                if is_structural_change:
+                    break
 
-                    if cve_id:
-                        try:
-                            security_issue_obj = SecurityIssue.objects.get(cve_id=cve_id)
-                        except SecurityIssue.DoesNotExist:
-                            continue  # or handle error
+        # --- BLOCK 1: YOUR DESTRUCTIVE REPLACEMENT LOGIC ---
+        # This block now ONLY runs if we detect a structural change.
+        if products_payload is not None and is_structural_change:
+            # Full Cleanup
+            ProductSecurityIssue.objects.filter(patch=patch).delete()
+            PatchImage.objects.filter(patch=patch).delete()
+            PatchProductImage.objects.filter(patch=patch).delete()
+            PatchProductHelmChart.objects.filter(patch=patch).delete()
+            patch.products.clear()
+            
+            # Rebuild from scratch using the same logic as create()
+            for pd_raw in products_initial:
+                pkg, _ = Product.objects.get_or_create(name=pd_raw['name'])
+                patch.products.add(pkg)
+                if (helm_charts_value := pd_raw.get('helm_charts')) is not None:
+                    PatchProductHelmChart.objects.create(patch=patch, product=pkg, helm_charts=helm_charts_value)
+                for img_dict in pd_raw.get('images', []):
+                    if not (img_name := img_dict.get('image_name')): continue
+                    existing_img_for_any_build = Image.objects.filter(image_name=img_name, product=pkg).order_by('-id').first()
 
-                        ProductSecurityIssue.objects.update_or_create(
-                            patch=patch,
-                            product=pkg,
-                            security_issue=security_issue_obj,
-                            defaults={'product_security_des': product_security_des}
-                        )     
+                    if existing_img_for_any_build and existing_img_for_any_build.build_number == patch.name:
+                        # EXACT MATCH: Image for this product and this patch already exists. Reuse it.
+                        img = existing_img_for_any_build
+                        if img.is_deleted:
+                            img.is_deleted = False
+                            img.save(update_fields=['is_deleted'])
+                    else:
+                        # NEW IMAGE FOR THIS PATCH: Either name is new, or build_number is different.
+                        # Create a new Image record, which correctly resets Twistlock status for this new instance.
+                        img = Image.objects.create(
+                            product=pkg, image_name=img_name, build_number=patch.name,
+                            release_date=patch.release_date, is_deleted=False,
+                            twistlock_report_url=None, twistlock_report_clean=None
+                        )            
+                    PatchProductImage.objects.create(patch=patch, product=pkg, image=img)
+                    PatchImage.objects.create(patch=patch, image=img, ot2_pass=img_dict.get('ot2_pass'), registry=img_dict.get('registry'), patch_build_number=img_dict.get('patch_build_number'))
+                    for issue in img_dict.get('security_issues', []):
+                        if (cve_id := issue.get('cve_id')):
+                            product_security_des = issue.get('product_security_des')
+                            security_issue_obj, _ = SecurityIssue.objects.get_or_create(cve_id=cve_id, defaults={'description': issue.get('description')})
+                            ProductSecurityIssue.objects.create(patch=patch, product=pkg, security_issue=security_issue_obj, product_security_des=product_security_des)
+        
+        # --- BLOCK 2: NON-DESTRUCTIVE DETAIL UPDATE ---
+        # This block runs if it's NOT a structural change, handling your specific case.
+        elif products_initial: # `elif` is crucial here
+            for pd_raw in products_initial:
+                try:
+                    product_obj = patch.products.get(name=pd_raw['name'])
+                except Product.DoesNotExist:
+                    continue # Skip products not on the patch
 
+                for img_dict in pd_raw.get('images', []):
+                    for issue in img_dict.get('security_issues', []):
+                        if (cve_id := issue.get('cve_id')):
+                            description = issue.get('product_security_des')
+                            try:
+                                security_issue_obj = SecurityIssue.objects.get(cve_id=cve_id)
+                                ProductSecurityIssue.objects.update_or_create(
+                                    patch=patch, product=product_obj, security_issue=security_issue_obj,
+                                    defaults={'product_security_des': description}
+                                )
+                            except SecurityIssue.DoesNotExist:
+                                continue # Skip unknown CVEs
 
-
+        # --- Jars and Scopes (Unchanged) ---
         if jars_payload is not None:
-            # simply update_or_create each row; no need to clear
+            kept_jars = [jd['name'] for jd in jars_payload]
+            PatchJar.objects.filter(patch=patch).exclude(jar__name__in=kept_jars).delete()
             for jd in jars_payload:
-                jar_obj, _ = Jar.objects.get_or_create(
-                    name=jd['name'],
-                    # defaults={'version': jd.get('version')}
-                )
-                PatchJar.objects.update_or_create(
-                    patch=patch,
-                    jar=jar_obj,
-                    defaults={'version': jd.get('version', None),
-                    'remarks': jd.get('remarks', '')}
-                )
-            # And remove any jars *not* in the new payload:
-            kept_jars = [ jd['name'] for jd in jars_payload ]
-            PatchJar.objects.filter(
-                patch=patch
-            ).exclude(
-                jar__name__in=kept_jars
-            ).delete()
+                jar_obj, _ = Jar.objects.get_or_create(name=jd['name'])
+                PatchJar.objects.update_or_create(patch=patch, jar=jar_obj, defaults={'version': jd.get('version'), 'remarks': jd.get('remarks', '')})
 
-        # 5) If scopes_data sent, clear & re-create
         if scopes_payload is not None:
-            # 1) Upsert each incoming scope
+            kept = [sd['name'] for sd in scopes_payload]
+            PatchHighLevelScope.objects.filter(patch=patch).exclude(scope__name__in=kept).delete()
             for sd in scopes_payload:
-                scope_obj, _ = HighLevelScope.objects.get_or_create(
-                    name=sd['name'],
-                    # defaults={'version': sd.get('version')}
-                )
-                PatchHighLevelScope.objects.update_or_create(
-                    patch=patch,
-                    scope=scope_obj,
-                    defaults={'version': sd.get('version', None),
-                    'remarks': sd.get('remarks', '')}
-                )
-
-            # 2) Remove any old scopes not in the new payload
-            kept = [ sd['name'] for sd in scopes_payload ]
-            PatchHighLevelScope.objects.filter(
-                patch=patch
-            ).exclude(
-                scope__name__in=kept
-            ).delete()
+                scope_obj, _ = HighLevelScope.objects.get_or_create(name=sd['name'])
+                PatchHighLevelScope.objects.update_or_create(patch=patch, scope=scope_obj, defaults={'version': sd.get('version'), 'remarks': sd.get('remarks', '')})
 
         return patch
-
-    
     def get_products(self, obj):
         patch = obj
         products_qs = obj.products.filter(is_deleted=False)
