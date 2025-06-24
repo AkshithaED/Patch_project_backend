@@ -24,8 +24,7 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# 1. New serializer for Security Issues to include the patch-specific description.
-#    It replaces the old 'ProductSecurityIssueSerializer'.
+
 class PatchContextSecurityIssueSerializer(serializers.ModelSerializer):
     """
     Serializes a SecurityIssue and adds 'product_security_des' from the
@@ -39,7 +38,7 @@ class PatchContextSecurityIssueSerializer(serializers.ModelSerializer):
             "cve_id", "cvss_score", "severity", "affected_libraries",
             "library_path", "description",
             "created_at", "updated_at", "is_deleted",
-            "product_security_des"  # The new field
+            "product_security_des"  
         ]
 
     def get_product_security_des(self, obj):
@@ -62,12 +61,10 @@ class PatchContextSecurityIssueSerializer(serializers.ModelSerializer):
             return ""
 
 
-# 2. Updated ImageSerializer to use the new security issue serializer.
 class ImageSerializer(serializers.ModelSerializer):
-    # Use the new serializer that includes 'product_security_des'
     security_issues = PatchContextSecurityIssueSerializer(many=True, read_only=True)
 
-    # Write-only field remains the same
+    # Write-only field
     security_issue_ids = serializers.SlugRelatedField(
         many=True,
         write_only=True,
@@ -85,7 +82,7 @@ class ImageSerializer(serializers.ModelSerializer):
             'security_issue_ids',
         ]
 
-    # create/update methods remain the same as they handle the direct M2M
+    # create/update methods 
     def create(self, validated_data):
         issue_ids = validated_data.pop('security_issue_ids', [])
         image = super().create(validated_data)
@@ -100,7 +97,6 @@ class ImageSerializer(serializers.ModelSerializer):
         return image
 
 
-# 3. Refactored ProductSerializer to handle its own nested data composition.
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     helm_charts = serializers.SerializerMethodField()
@@ -216,7 +212,6 @@ class ProductNestedSerializer(serializers.Serializer):
     images = PatchImageNestedSerializer(many=True)
 
 
-# --- MAIN PATCH SERIALIZER ---
 class PatchSerializer(serializers.ModelSerializer):
     jars = PatchJarSerializer(source='patchjar_set', many=True, read_only=True)
     scopes = PatchHighLevelScopeSerializer(source='patchhighlevelscope_set', many=True, read_only=True)
@@ -272,7 +267,6 @@ class PatchSerializer(serializers.ModelSerializer):
                     defaults={
                         'release_date': patch.release_date,
                         'is_deleted': False,
-                        # Defaults only apply on CREATION.
                         'twistlock_report_url': None,
                         'twistlock_report_clean': None,
                     }
@@ -297,7 +291,6 @@ class PatchSerializer(serializers.ModelSerializer):
             for img_dict in pd_raw.get('images', []):
                 for issue in img_dict.get('security_issues', []):
                     cve_id = issue.get('cve_id')
-                    # UPDATED: Get description from the issue object itself
                     product_security_des = issue.get('product_security_des')
 
                     if cve_id:
@@ -316,7 +309,7 @@ class PatchSerializer(serializers.ModelSerializer):
                             defaults={'product_security_des': product_security_des}
                         )
 
-        # Process Jars and Scopes (unchanged)
+        # Process Jars and Scopes 
         for jd in jars_payload:
             jar_obj, _ = Jar.objects.get_or_create(name=jd['name'])
             PatchJar.objects.update_or_create(
@@ -329,11 +322,10 @@ class PatchSerializer(serializers.ModelSerializer):
             )
         return patch
 
-  # In class PatchSerializer:
-# ... keep the 'create' and 'get_products' methods as they are ...
+
 
     def update(self, instance, validated_data):
-        # Pop all potential payloads.
+        # Pop all  payloads.
         jars_payload = validated_data.pop('jars_data', None)
         scopes_payload = validated_data.pop('scopes_data', None)
         products_payload = validated_data.pop('products_data', None)
@@ -344,13 +336,9 @@ class PatchSerializer(serializers.ModelSerializer):
         # Update the simple fields on the Patch model itself.
         patch = super().update(instance, validated_data)
 
-        # --- SMART LOGIC: Determine User's Intent ---
         is_structural_change = False
         if products_initial:
-            # Check if the payload indicates a structural change.
-            # A structural change means adding/removing products or images,
-            # or changing fields like 'helm_charts' or 'image_name'.
-            # A detail-only update will typically only contain 'name' and nested 'security_issues'.
+          
             for pd_raw in products_initial:
                 if "helm_charts" in pd_raw or "images" not in pd_raw:
                     is_structural_change = True
@@ -363,10 +351,7 @@ class PatchSerializer(serializers.ModelSerializer):
                 if is_structural_change:
                     break
 
-        # --- BLOCK 1: YOUR DESTRUCTIVE REPLACEMENT LOGIC ---
-        # This block now ONLY runs if we detect a structural change.
         if products_payload is not None and is_structural_change:
-            # Full Cleanup
             ProductSecurityIssue.objects.filter(patch=patch).delete()
             PatchImage.objects.filter(patch=patch).delete()
             PatchProductImage.objects.filter(patch=patch).delete()
@@ -384,13 +369,11 @@ class PatchSerializer(serializers.ModelSerializer):
                     existing_img_for_any_build = Image.objects.filter(image_name=img_name, product=pkg).order_by('-id').first()
 
                     if existing_img_for_any_build and existing_img_for_any_build.build_number == patch.name:
-                        # EXACT MATCH: Image for this product and this patch already exists. Reuse it.
                         img = existing_img_for_any_build
                         if img.is_deleted:
                             img.is_deleted = False
                             img.save(update_fields=['is_deleted'])
                     else:
-                        # NEW IMAGE FOR THIS PATCH: Either name is new, or build_number is different.
                         # Create a new Image record, which correctly resets Twistlock status for this new instance.
                         img = Image.objects.create(
                             product=pkg, image_name=img_name, build_number=patch.name,
@@ -405,9 +388,7 @@ class PatchSerializer(serializers.ModelSerializer):
                             security_issue_obj, _ = SecurityIssue.objects.get_or_create(cve_id=cve_id, defaults={'description': issue.get('description')})
                             ProductSecurityIssue.objects.create(patch=patch, product=pkg, security_issue=security_issue_obj, product_security_des=product_security_des)
         
-        # --- BLOCK 2: NON-DESTRUCTIVE DETAIL UPDATE ---
-        # This block runs if it's NOT a structural change, handling your specific case.
-        elif products_initial: # `elif` is crucial here
+        elif products_initial: 
             for pd_raw in products_initial:
                 try:
                     product_obj = patch.products.get(name=pd_raw['name'])
@@ -427,7 +408,7 @@ class PatchSerializer(serializers.ModelSerializer):
                             except SecurityIssue.DoesNotExist:
                                 continue # Skip unknown CVEs
 
-        # --- Jars and Scopes (Unchanged) ---
+        # --- Jars and Scopes  ---
         if jars_payload is not None:
             kept_jars = [jd['name'] for jd in jars_payload]
             PatchJar.objects.filter(patch=patch).exclude(jar__name__in=kept_jars).delete()
