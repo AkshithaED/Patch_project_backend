@@ -257,34 +257,86 @@ class PatchSerializer(serializers.ModelSerializer):
                     patch=patch, product=pkg, defaults={"helm_charts": helm_charts_value}
                 )
 
+            # for img_dict in pd['images']:
+            #     img_name = img_dict.get('image_name')
+            #       # Use get_or_create to AVOID overwriting existing Twistlock data.
+            #     img, created = Image.objects.get_or_create(
+            #         product=pkg,
+            #         image_name=img_name,
+            #         build_number=patch.name,
+            #         defaults={
+            #             'release_date': patch.release_date,
+            #             'is_deleted': False,
+            #             'twistlock_report_url': None,
+            #             'twistlock_report_clean': None,
+            #         }
+            #     )
+            #     # If the image already existed but was marked as deleted, un-delete it.
+            #     if not created and img.is_deleted:
+            #         img.is_deleted = False
+            #         img.save(update_fields=['is_deleted'])
+
+            #     PatchProductImage.objects.get_or_create(patch=patch, product=pkg, image=img)
+            #     PatchImage.objects.update_or_create(
+            #         patch=patch, image=img,
+            #         defaults={
+            #             'ot2_pass': img_dict.get('ot2_pass'), 'registry': img_dict.get('registry'),
+            #             'patch_build_number': img_dict.get('patch_build_number'),
+            #         }
+            #     )
             for img_dict in pd['images']:
                 img_name = img_dict.get('image_name')
-                  # Use get_or_create to AVOID overwriting existing Twistlock data.
-                img, created = Image.objects.get_or_create(
-                    product=pkg,
-                    image_name=img_name,
-                    build_number=patch.name,
-                    defaults={
-                        'release_date': patch.release_date,
-                        'is_deleted': False,
-                        'twistlock_report_url': None,
-                        'twistlock_report_clean': None,
-                    }
-                )
-                # If the image already existed but was marked as deleted, un-delete it.
-                if not created and img.is_deleted:
-                    img.is_deleted = False
-                    img.save(update_fields=['is_deleted'])
+                existing_img = Image.objects.filter(image_name=img_name).first()
 
-                PatchProductImage.objects.get_or_create(patch=patch, product=pkg, image=img)
+                if existing_img:
+                    # Always create a new image with fresh twistlock fields
+                    img, created = Image.objects.get_or_create(
+                        product=pkg,
+                        image_name=img_name,
+                        build_number=patch.name,
+                        defaults={
+                            'release_date': patch.release_date,
+                            "is_deleted": False,
+                            "twistlock_report_url": None,
+                            "twistlock_report_clean": None,
+                        }
+                    )
+                    if not created:
+                        img.twistlock_report_url = None
+                        img.twistlock_report_clean = None
+                        img.is_deleted = False
+                        img.save()
+
+                else:
+                    # New image – also ensure twistlock fields are null
+                    img = Image.objects.create(
+                        product=pkg,
+                        image_name=img_name,
+                        build_number=patch.name,
+                        release_date= patch.release_date ,
+                        twistlock_report_url=None,
+                        twistlock_report_clean=None,
+                        is_deleted=False,
+                    )
+
+
+                # Create PatchProductImage (basic linking)
+                PatchProductImage.objects.get_or_create(
+                    patch=patch,
+                    product=pkg,
+                    image=img
+                )
+
+                # Create or update PatchImage with extra patch-specific fields
                 PatchImage.objects.update_or_create(
-                    patch=patch, image=img,
+                    patch=patch,
+                    image=img,
                     defaults={
-                        'ot2_pass': img_dict.get('ot2_pass'), 'registry': img_dict.get('registry'),
+                        'ot2_pass': img_dict.get('ot2_pass'),
+                        'registry': img_dict.get('registry'),
                         'patch_build_number': img_dict.get('patch_build_number'),
                     }
                 )
-
         # 4. Process security issues from the raw initial data payload
         for pd_raw in initial_products_data:
             pkg = Product.objects.get(name=pd_raw['name'])
@@ -366,22 +418,60 @@ class PatchSerializer(serializers.ModelSerializer):
                     PatchProductHelmChart.objects.create(patch=patch, product=pkg, helm_charts=helm_charts_value)
                 for img_dict in pd_raw.get('images', []):
                     if not (img_name := img_dict.get('image_name')): continue
-                    existing_img_for_any_build = Image.objects.filter(image_name=img_name, product=pkg).order_by('-id').first()
+                    existing_img = Image.objects.filter(image_name=img_name).first()
 
-                    if existing_img_for_any_build and existing_img_for_any_build.build_number == patch.name:
-                        img = existing_img_for_any_build
-                        if img.is_deleted:
-                            img.is_deleted = False
-                            img.save(update_fields=['is_deleted'])
+                    if existing_img and existing_img.build_number != patch.name:
+                        # Create new image with new build_number
+                        img, created = Image.objects.get_or_create(
+                            product=pkg,
+                            image_name=img_name,
+                            build_number=patch.name,
+                            defaults={
+                                'is_deleted': False,
+                                'release_date': patch.release_date
+                            }
+                        )
+                        # Your original code reset these fields, so we do the same.
+                        img.twistlock_report_url = None
+                        img.twistlock_report_clean = None
+                        img.save()
+
+                    elif existing_img and existing_img.build_number == patch.name:
+                        # Use the existing one, update if needed
+                        existing_img.is_deleted = False
+                        existing_img.save()
+                        img = existing_img
+
                     else:
-                        # Create a new Image record, which correctly resets Twistlock status for this new instance.
+                        # No existing image at all – ensure twistlock fields are null
                         img = Image.objects.create(
-                            product=pkg, image_name=img_name, build_number=patch.name,
-                            release_date=patch.release_date, is_deleted=False,
-                            twistlock_report_url=None, twistlock_report_clean=None
-                        )            
-                    PatchProductImage.objects.create(patch=patch, product=pkg, image=img)
-                    PatchImage.objects.create(patch=patch, image=img, ot2_pass=img_dict.get('ot2_pass'), registry=img_dict.get('registry'), patch_build_number=img_dict.get('patch_build_number'))
+                            product=pkg,
+                            image_name=img_name,
+                            build_number=patch.name,
+                            release_date=patch.release_date,
+                            is_deleted=False,
+                            twistlock_report_url=None,
+                            twistlock_report_clean=None,
+                        )
+
+                    # Link product image to patch
+                    PatchProductImage.objects.update_or_create(
+                        patch=patch,
+                        product=pkg,
+                        image=img
+                    )
+
+                    # Create or update PatchImage with the provided metadata
+                    PatchImage.objects.update_or_create(
+                        patch=patch,
+                        image=img,
+                        defaults={
+                            'ot2_pass': img_dict.get('ot2_pass'),
+                            'registry': img_dict.get('registry'),
+                            'patch_build_number': img_dict.get('patch_build_number'),
+                        }
+                    )
+                    
                     for issue in img_dict.get('security_issues', []):
                         if (cve_id := issue.get('cve_id')):
                             product_security_des = issue.get('product_security_des')
