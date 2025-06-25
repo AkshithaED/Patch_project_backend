@@ -364,7 +364,7 @@ def update_patch_data(request):
 
                 # — NEW: process jars nested under this image —
                 for jar_data in img_data.get("jars", []):
-                    jar_name = jar_data.get("name")
+                    jar_name = jar_data.get("Name")
                     if not jar_name:
                         continue
 
@@ -373,7 +373,7 @@ def update_patch_data(request):
 
                     # 2) build the fields for PatchImageJar (no 'version' field here)
                     pjij_defaults = {
-                        **({"current_version": jar_data["curr_version"]} if "curr_version" in jar_data else {}),
+                        **({"current_version": jar_data["Version"]} if "Version" in jar_data else {}),
                         **({"updated": jar_data["updated"]} if "updated" in jar_data else {}),
                         **({"remarks": jar_data["remarks"]} if "remarks" in jar_data else {}),
                     }
