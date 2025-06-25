@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from .data import PATCH_DATA, build_image_url
 from rest_framework.views import APIView
+from .update_data import update_details
 
 
 
@@ -626,13 +627,7 @@ def release_product_image_list(request):
 
 #         except Patch.DoesNotExist:
 #             return Response({"error": "Patch not found"}, status=status.HTTP_404_NOT_FOUND)
-from django.shortcuts import get_object_or_404
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .models import Patch, Product
-# Import your serializer
-from .serializers import PatchSerializer
+
 
 class PatchProductDetailView(APIView):
     def get(self, request, patch_name, product_name):
@@ -644,6 +639,8 @@ class PatchProductDetailView(APIView):
                     {"error": f"Product '{product_name}' not found in patch '{patch_name}'"},
                     status=status.HTTP_404_NOT_FOUND
                 )
+
+            update_details(patch_name, product_name)
 
             serializer = PatchSerializer(patch, context={'request': request})
             
@@ -662,3 +659,19 @@ class PatchProductDetailView(APIView):
 
         except Patch.DoesNotExist:
             return Response({"error": "Patch not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+
+class PatchDetailView(APIView):
+   
+    def get(self, request, patch_name):
+     
+        patch = get_object_or_404(Patch, name=patch_name)
+
+        update_details(patch_name)
+
+        serializer = PatchSerializer(patch, context={'request': request})
+
+       
+        return Response([serializer.data], status=status.HTTP_200_OK)
