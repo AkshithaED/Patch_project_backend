@@ -211,7 +211,25 @@ class PatchProductJar(models.Model):
     def __str__(self):
         return f"{self.patch.name} - {self.product.name} - {self.jar.name}"
 
+# -----------------------
+# PatchImageJar Model
+# -----------------------
+class PatchImageJar(models.Model):
+    patch_image = models.ForeignKey('PatchImage', on_delete=models.CASCADE)
+    jar = models.ForeignKey('Jar', on_delete=models.CASCADE)
+    current_version = models.CharField(max_length=100, blank=True, null=True)
+    remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated = models.BooleanField(default=False)
 
+    class Meta:
+        unique_together = ('patch_image', 'jar')
+        verbose_name = 'Patch Image Jar'
+        verbose_name_plural = 'Patch Image Jars'
+
+    def __str__(self):
+        return f"{self.patch_image.patch.name} - Image #{self.patch_image.id} - {self.jar.name}"
+    
 # -----------------------
 # PatchHighLevelScope Model
 # -----------------------  

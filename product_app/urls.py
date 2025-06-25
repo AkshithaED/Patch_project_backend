@@ -5,7 +5,8 @@ from .views import (
     ReleaseViewSet, ProductViewSet, ImageViewSet,
     SecurityIssueViewSet, PatchViewSet, JarViewSet,
     HighLevelScopeViewSet, patch_completion_percentage,patch_product_completion_status, update_patch_data, 
-    patch_product_jars_list, update_patch_product_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,PatchProductDetailView
+    patch_image_jars_list,
+    update_patch_image_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,PatchProductDetailView
 
 )
 
@@ -111,8 +112,18 @@ urlpatterns = [
     path('jars/<str:name>/', jar_detail, name='jar-detail'),
     path('high-level-scopes/', high_level_scope_list, name='high-level-scope-list'),
     path('high-level-scopes/<str:name>/', high_level_scope_detail, name='high-level-scope-detail'),
-    path('patchproductjars/<str:patch_name>/<str:product_name>/', patch_product_jars_list),
-    path('patchproductjars/<str:patch_name>/<str:product_name>/<str:jar_name>/', update_patch_product_jar),
+    # path('patchproductjars/<str:patch_name>/<str:product_name>/', patch_product_jars_list),
+    # path('patchproductjars/<str:patch_name>/<str:product_name>/<str:jar_name>/', update_patch_product_jar),
+    path(
+        'patchimagejars/<str:patch_name>/<str:image_name>/',
+        patch_image_jars_list,
+        name='patch_image_jars_list'
+    ),
+    path(
+        'patchimagejars/<str:patch_name>/<str:image_name>/<str:jar_name>/',
+        update_patch_image_jar,
+        name='update_patch_image_jar'
+    ),
     path('build-image-url/', build_image_url_endpoint, name='build-image-url'),
     path('product-jar-releases/', product_jar_release_list, name='product_jar_release_list'),
     path('release-product-images/', release_product_image_list, name='release_product_image_list'),

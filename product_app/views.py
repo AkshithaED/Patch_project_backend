@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchImageJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue
 from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
@@ -55,7 +55,6 @@ class HighLevelScopeViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 def patch_completion_percentage(request, name):
     try:
-        # patch = Patch.objects.get(name=name)
         patch = Patch.objects.get(name=name, is_deleted=False)
     except Patch.DoesNotExist:
         return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -66,43 +65,43 @@ def patch_completion_percentage(request, name):
     total_items = 0
     completed_items = 0
 
-    #  Check JARs
-    # for jar in patch_data.get('jars', []):
-    #     total_items += 1
-    #     if jar.get('updated') is True:
-    #         completed_items += 1
-    #     elif jar.get('remarks'):  # updated == False but has remarks
-    #         completed_items += 1
-
-    #  Check product images
     for product in patch_data.get('products', []):
-
-         #  Count JARs via PatchProductJar
-        ppj_qs = PatchProductJar.objects.filter(
-            patch_jar_id__patch=patch,
-            product=product.get('name')
-        )
-        for ppj in ppj_qs:
-            total_items += 1
-            # Completed if updated=True or non‐empty remarks
-            if ppj.updated or (ppj.remarks and ppj.remarks.strip() != ""):
-                completed_items += 1
-
         for image in product.get('images', []):
-            total_items += 1  # 1/2 for registry release, 1/2 for OT2_PaaS
-            if image.get('registry') and image.get('registry').lower() == 'released':
+            total_items += 1
+            # registry half-point
+            if image.get('registry', '').lower() == 'released':
                 completed_items += 0.5
-            if image.get('ot2_pass') and image.get('ot2_pass').lower() == 'released':
+            # ot2_pass half-point
+            if image.get('ot2_pass', '').lower() == 'released':
                 completed_items += 0.5
 
-    #  Avoid division by zero
+            # fetch the PatchImage row
+            try:
+                pi = PatchImage.objects.get(
+                    patch=patch,
+                    image__image_name=image.get('image_name')
+                )
+            except PatchImage.DoesNotExist:
+                continue
+
+            # now only count those jars where a PatchJar exists
+            pij_qs = PatchImageJar.objects.filter(patch_image=pi)
+            for pij in pij_qs:
+                # skip if there's no matching PatchJar
+                if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
+                    continue
+
+                total_items += 1
+                if pij.updated or (pij.remarks and pij.remarks.strip()):
+                    completed_items += 1
+
     if total_items == 0:
         return Response({"completion_percentage": 0}, status=status.HTTP_200_OK)
 
     percentage = round((completed_items / total_items) * 100, 2)
     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
 
-    
+#api for getting completed and incomplete products
 @api_view(['GET'])
 def patch_product_completion_status(request, name):
     try:
@@ -120,28 +119,40 @@ def patch_product_completion_status(request, name):
         total_items = 0
         completed_items = 0
 
-        # --- Count JARs via PatchProductJar ---
-        ppj_qs = PatchProductJar.objects.filter(
-            patch_jar_id__patch=patch,
-            product=product.get('name')
-        )
-        for ppj in ppj_qs:
-            total_items += 1
-            if ppj.updated or (ppj.remarks and ppj.remarks.strip() != ""):
-                completed_items += 1
-
-        # --- Count image status ---
+        # --- image halves + jar counts per image ---
         for image in product.get('images', []):
-            total_items += 1  # Each image counts as 1 unit (0.5 + 0.5)
-            if image.get('registry') and image.get('registry').lower() == 'released':
-                completed_items += 0.5
-            if image.get('ot2_pass') and image.get('ot2_pass').lower() == 'released':
+            total_items += 1
+            # registry half-point
+            if image.get('registry', '').lower() == 'released':
                 completed_items += 0.5
 
-        if total_items == 0:
-            # Nothing to track means incomplete
-            incomplete_products.append(product)
-        elif completed_items == total_items:
+            # OT2 half-point
+            if image.get('ot2_pass', '').lower() == 'released':
+                completed_items += 0.5
+
+            # fetch the PatchImage instance
+            try:
+                pi = PatchImage.objects.get(
+                    patch=patch,
+                    image__image_name=image.get('image_name')
+                )
+            except PatchImage.DoesNotExist:
+                # no jars to count for this image
+                continue
+
+            # iterate PatchImageJar rows
+            pij_qs = PatchImageJar.objects.filter(patch_image=pi)
+            for pij in pij_qs:
+                # only count if a matching PatchJar exists
+                if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
+                    continue
+
+                total_items += 1
+                if pij.updated or (pij.remarks and pij.remarks.strip()):
+                    completed_items += 1
+
+        # decide bucket
+        if total_items > 0 and completed_items == total_items:
             completed_products.append(product)
         else:
             incomplete_products.append(product)
@@ -196,55 +207,55 @@ def update_patch_data(request):
             #
             # 2.a) Process “jars” for this (patch, product) → write into PatchProductJar
             #
-            for jar_data in prod_data.get("jars", []):  # ← new block
-                jar_name = jar_data.get("name")
-                if not jar_name:
-                    continue
+            # for jar_data in prod_data.get("jars", []):  # ← new block
+            #     jar_name = jar_data.get("name")
+            #     if not jar_name:
+            #         continue
 
-                #  2.a.i) Ensure the Jar exists (or create it if missing)
-                jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
+            #     #  2.a.i) Ensure the Jar exists (or create it if missing)
+            #     jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
 
-                #  2.a.ii) Find the existing PatchJar for (this patch, this jar),
-                #            so we can pull its “version” field:
-                try:
-                    patch_jar = PatchJar.objects.get(patch=patch, jar=jar_obj)
-                except PatchJar.DoesNotExist:
-                    # If there is no PatchJar row yet, we can either:
-                    #  • create a default one with version = None, or skip.
-                    patch_jar = PatchJar.objects.create(patch=patch, jar=jar_obj, version=None, remarks="")
+            #     #  2.a.ii) Find the existing PatchJar for (this patch, this jar),
+            #     #            so we can pull its “version” field:
+            #     try:
+            #         patch_jar = PatchJar.objects.get(patch=patch, jar=jar_obj)
+            #     except PatchJar.DoesNotExist:
+            #         # If there is no PatchJar row yet, we can either:
+            #         #  • create a default one with version = None, or skip.
+            #         patch_jar = PatchJar.objects.create(patch=patch, jar=jar_obj, version=None, remarks="")
                 
-                #  2.a.iii) Now, upsert the PatchProductJar row.
-                defaults = {}
+            #     #  2.a.iii) Now, upsert the PatchProductJar row.
+            #     defaults = {}
 
-                # If the payload sent “curr_version”, overwrite current_version:
-                if "curr_version" in jar_data:
-                    defaults["current_version"] = jar_data.get("curr_version")
-                else:
-                    # Optionally: do nothing, leave existing current_version alone.
-                    pass
+            #     # If the payload sent “curr_version”, overwrite current_version:
+            #     if "curr_version" in jar_data:
+            #         defaults["current_version"] = jar_data.get("curr_version")
+            #     else:
+            #         # Optionally: do nothing, leave existing current_version alone.
+            #         pass
 
-                # Always set “version” from the PatchJar row (so they stay in sync):
-                # defaults["version"] = patch_jar.version
+            #     # Always set “version” from the PatchJar row (so they stay in sync):
+            #     # defaults["version"] = patch_jar.version
 
-                # If payload sent “updated” or “remarks”, copy them over:
-                if "updated" in jar_data:
-                    defaults["updated"] = jar_data["updated"]
-                if "remarks" in jar_data:
-                    defaults["remarks"] = jar_data["remarks"]
+            #     # If payload sent “updated” or “remarks”, copy them over:
+            #     if "updated" in jar_data:
+            #         defaults["updated"] = jar_data["updated"]
+            #     if "remarks" in jar_data:
+            #         defaults["remarks"] = jar_data["remarks"]
 
-                # Upsert PatchProductJar:
-                ppj, created = PatchProductJar.objects.update_or_create(
-                    patch_jar_id=patch_jar,  # this is a ForeignKey to PatchJar
-                    product=product,
-                    defaults=defaults
-                )
-                # At this point, you have either created or updated the (
-                #    patch_jar_id = patch_jar, product = product
-                # ) row, with default values set above.
+            #     # Upsert PatchProductJar:
+            #     ppj, created = PatchProductJar.objects.update_or_create(
+            #         patch_jar_id=patch_jar,  # this is a ForeignKey to PatchJar
+            #         product=product,
+            #         defaults=defaults
+            #     )
+            #     # At this point, you have either created or updated the (
+            #     #    patch_jar_id = patch_jar, product = product
+            #     # ) row, with default values set above.
 
-            #
-            # 2.b) Process “images” for this (patch, product)
-            #      (update Image fields, PatchImage fields, and attach SecurityIssues)
+            # #
+            # # 2.b) Process “images” for this (patch, product)
+            # #      (update Image fields, PatchImage fields, and attach SecurityIssues)
 
             for img_data in prod_data.get("images", []):
                 image_name = img_data.get("image_name")
@@ -316,25 +327,57 @@ def update_patch_data(request):
                 #
                 #  2.b.iii) Upsert (patch, image) → PatchImage, only on the fields given
                 #
-                patch_image_defaults = {}
-                if "ot2_pass" in img_data:
-                    patch_image_defaults["ot2_pass"] = img_data["ot2_pass"]
-                if "registry" in img_data:
-                    patch_image_defaults["registry"] = img_data["registry"]
-                # if "helm_charts" in img_data:
-                #     patch_image_defaults["helm_charts"] = img_data["helm_charts"]
-                if "build_number" in img_data:
-                    patch_image_defaults["patch_build_number"] = img_data["build_number"]
+                # patch_image_defaults = {}
+                # if "ot2_pass" in img_data:
+                #     patch_image_defaults["ot2_pass"] = img_data["ot2_pass"]
+                # if "registry" in img_data:
+                #     patch_image_defaults["registry"] = img_data["registry"]
+                # # if "helm_charts" in img_data:
+                # #     patch_image_defaults["helm_charts"] = img_data["helm_charts"]
+                # if "build_number" in img_data:
+                #     patch_image_defaults["patch_build_number"] = img_data["build_number"]
 
-                if patch_image_defaults:
-                    # update_or_create PatchImage row for (patch, image)
-                    PatchImage.objects.update_or_create(
-                        patch=patch,
-                        image=image,
-                        defaults=patch_image_defaults
+                # if patch_image_defaults:
+                #     # update_or_create PatchImage row for (patch, image)
+                #     PatchImage.objects.update_or_create(
+                #         patch=patch,
+                #         image=image,
+                #         defaults=patch_image_defaults
+                #     )
+
+                # -- fetch or create PatchImage
+                patch_image, _ = PatchImage.objects.update_or_create(
+                    patch=patch,
+                    image=image,
+                    defaults={
+                        **({"ot2_pass": img_data["ot2_pass"]} if "ot2_pass" in img_data else {}),
+                        **({"registry": img_data["registry"]} if "registry" in img_data else {}),
+                        **({"patch_build_number": img_data["build_number"]} if "build_number" in img_data else {}),
+                    }
+                )
+
+                # — NEW: process jars nested under this image —
+                for jar_data in img_data.get("jars", []):
+                    jar_name = jar_data.get("name")
+                    if not jar_name:
+                        continue
+
+                    # 1) auto-create the Jar if missing
+                    jar_obj, _ = Jar.objects.get_or_create(name=jar_name)
+
+                    # 2) build the fields for PatchImageJar (no 'version' field here)
+                    pjij_defaults = {
+                        **({"current_version": jar_data["curr_version"]} if "curr_version" in jar_data else {}),
+                        **({"updated": jar_data["updated"]} if "updated" in jar_data else {}),
+                        **({"remarks": jar_data["remarks"]} if "remarks" in jar_data else {}),
+                    }
+
+                    # 3) upsert into PatchImageJar
+                    PatchImageJar.objects.update_or_create(
+                        patch_image=patch_image,
+                        jar=jar_obj,
+                        defaults=pjij_defaults
                     )
-                # If no patch_image_defaults were provided, we leave any existing PatchImage untouched.
-
             # 2.c) Upsert PatchProductHelmChart
             helm_val = prod_data.get("helm_charts", None)
             if helm_val is not None:
@@ -347,19 +390,137 @@ def update_patch_data(request):
 
     return Response({"status": "success"}, status=status.HTTP_200_OK)
 
-# API to get product specific jars
+# # API to get product specific jars
+# @api_view(['GET'])
+# def patch_product_jars_list(request, patch_name, product_name):
+#     # patch_name = request.query_params.get('patch_name')
+#     # product_name = request.query_params.get('product_name')
+
+#     if not patch_name or not product_name:
+#         return Response(
+#             {"error": "Both 'patch_name' and 'product_name' query parameters are required."},
+#             status=status.HTTP_400_BAD_REQUEST
+#         )
+
+#     # 1) Verify patch exists
+#     try:
+#         patch = Patch.objects.get(name=patch_name, is_deleted=False)
+#     except Patch.DoesNotExist:
+#         return Response(
+#             {"error": f"Patch '{patch_name}' not found."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 2) Verify product exists
+#     try:
+#         product = Product.objects.get(name=product_name, is_deleted=False)
+#     except Product.DoesNotExist:
+#         return Response(
+#             {"error": f"Product '{product_name}' not found."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 3) Fetch all PatchProductJar rows for (patch, product)
+#     ppj_qs = PatchProductJar.objects.filter(
+#         patch_jar_id__patch=patch,
+#         product=product
+#     )
+
+#     # 4) Build response array
+#     jars_list = []
+#     for ppj in ppj_qs:
+#         pj = ppj.patch_jar_id  # the related PatchJar instance
+#         jar_dict = {
+#             "name": pj.jar.name,
+#             "version": pj.version,
+#             "current_version": ppj.current_version,
+#             "remarks": ppj.remarks,
+#             "updated": ppj.updated,
+#         }
+#         jars_list.append(jar_dict)
+
+#     return Response({"jars": jars_list}, status=status.HTTP_200_OK)
+
+# #API for updating patchproductjars
+# @api_view(['PATCH'])
+# def update_patch_product_jar(request, patch_name, product_name, jar_name):
+#     # 1) Look up the Patch
+#     try:
+#         patch = Patch.objects.get(name=patch_name, is_deleted=False)
+#     except Patch.DoesNotExist:
+#         return Response(
+#             {"error": f"Patch '{patch_name}' not found."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 2) Look up the Product
+#     try:
+#         product = Product.objects.get(name=product_name, is_deleted=False)
+#     except Product.DoesNotExist:
+#         return Response(
+#             {"error": f"Product '{product_name}' not found."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 3) Look up the Jar
+#     try:
+#         jar = Jar.objects.get(name=jar_name)
+#     except Jar.DoesNotExist:
+#         return Response(
+#             {"error": f"Jar '{jar_name}' not found."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 4) Find the matching PatchJar (patch, jar)
+#     try:
+#         patch_jar = PatchJar.objects.get(patch=patch, jar=jar)
+#     except PatchJar.DoesNotExist:
+#         return Response(
+#             {"error": f"No PatchJar found for patch '{patch_name}' and jar '{jar_name}'."},
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 5) Find the single PatchProductJar row for (patch_jar, product)
+#     try:
+#         ppj = PatchProductJar.objects.get(patch_jar_id=patch_jar, product=product)
+#     except PatchProductJar.DoesNotExist:
+#         return Response(
+#             {
+#               "error": (
+#                 f"No PatchProductJar found for patch='{patch_name}', "
+#                 f"product='{product_name}', jar='{jar_name}'."
+#               )
+#             },
+#             status=status.HTTP_404_NOT_FOUND
+#         )
+
+#     # 6) Update only fields provided in JSON
+#     data = request.data
+#     updated = False
+
+#     if "remarks" in data:
+#         ppj.remarks = data["remarks"]
+#         updated = True
+
+#     if "updated" in data:
+#         ppj.updated = data["updated"]
+#         updated = True
+
+#     if updated:
+#         ppj.save()
+#         return Response(
+#             {"status": "success", "remarks": ppj.remarks, "updated": ppj.updated},
+#             status=status.HTTP_200_OK
+#         )
+#     else:
+#         return Response(
+#             {"error": "No updatable fields ('remarks' or 'updated') provided."},
+#             status=status.HTTP_400_BAD_REQUEST
+#         )
+# API to list all jars for a given patch & image
 @api_view(['GET'])
-def patch_product_jars_list(request, patch_name, product_name):
-    # patch_name = request.query_params.get('patch_name')
-    # product_name = request.query_params.get('product_name')
-
-    if not patch_name or not product_name:
-        return Response(
-            {"error": "Both 'patch_name' and 'product_name' query parameters are required."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # 1) Verify patch exists
+def patch_image_jars_list(request, patch_name, image_name):
+    # 1) Verify Patch
     try:
         patch = Patch.objects.get(name=patch_name, is_deleted=False)
     except Patch.DoesNotExist:
@@ -368,40 +529,44 @@ def patch_product_jars_list(request, patch_name, product_name):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 2) Verify product exists
+    # 2) Verify Image
     try:
-        product = Product.objects.get(name=product_name, is_deleted=False)
-    except Product.DoesNotExist:
+        image = Image.objects.get(image_name=image_name, build_number=patch_name)
+    except Image.DoesNotExist:
         return Response(
-            {"error": f"Product '{product_name}' not found."},
+            {"error": f"Image '{image_name}' not found for patch '{patch_name}'."},
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 3) Fetch all PatchProductJar rows for (patch, product)
-    ppj_qs = PatchProductJar.objects.filter(
-        patch_jar_id__patch=patch,
-        product=product
-    )
+    # 3) Fetch PatchImage
+    try:
+        patch_image = PatchImage.objects.get(patch=patch, image=image)
+    except PatchImage.DoesNotExist:
+        return Response(
+            {"jars": []},
+            status=status.HTTP_200_OK
+        )
 
-    # 4) Build response array
+    # 4) Fetch all PatchImageJar rows for this patch_image
+    pij_qs = PatchImageJar.objects.filter(patch_image=patch_image)
+
+    # 5) Build response list
     jars_list = []
-    for ppj in ppj_qs:
-        pj = ppj.patch_jar_id  # the related PatchJar instance
-        jar_dict = {
-            "name": pj.jar.name,
-            "version": pj.version,
-            "current_version": ppj.current_version,
-            "remarks": ppj.remarks,
-            "updated": ppj.updated,
-        }
-        jars_list.append(jar_dict)
+    for pij in pij_qs:
+        jars_list.append({
+            "name": pij.jar.name,
+            "current_version": pij.current_version,
+            "remarks": pij.remarks,
+            "updated": pij.updated,
+        })
 
     return Response({"jars": jars_list}, status=status.HTTP_200_OK)
 
-#API for updating patchproductjars
+
+# API to update a single PatchImageJar entry
 @api_view(['PATCH'])
-def update_patch_product_jar(request, patch_name, product_name, jar_name):
-    # 1) Look up the Patch
+def update_patch_image_jar(request, patch_name, image_name, jar_name):
+    # 1) Verify Patch
     try:
         patch = Patch.objects.get(name=patch_name, is_deleted=False)
     except Patch.DoesNotExist:
@@ -410,16 +575,25 @@ def update_patch_product_jar(request, patch_name, product_name, jar_name):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 2) Look up the Product
+    # 2) Verify Image
     try:
-        product = Product.objects.get(name=product_name, is_deleted=False)
-    except Product.DoesNotExist:
+        image = Image.objects.get(image_name=image_name, build_number=patch_name)
+    except Image.DoesNotExist:
         return Response(
-            {"error": f"Product '{product_name}' not found."},
+            {"error": f"Image '{image_name}' not found for patch '{patch_name}'."},
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 3) Look up the Jar
+    # 3) Fetch PatchImage
+    try:
+        patch_image = PatchImage.objects.get(patch=patch, image=image)
+    except PatchImage.DoesNotExist:
+        return Response(
+            {"error": f"No PatchImage found for patch '{patch_name}' and image '{image_name}'."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # 4) Verify Jar
     try:
         jar = Jar.objects.get(name=jar_name)
     except Jar.DoesNotExist:
@@ -428,52 +602,47 @@ def update_patch_product_jar(request, patch_name, product_name, jar_name):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 4) Find the matching PatchJar (patch, jar)
+    # 5) Fetch PatchImageJar
     try:
-        patch_jar = PatchJar.objects.get(patch=patch, jar=jar)
-    except PatchJar.DoesNotExist:
+        pij = PatchImageJar.objects.get(patch_image=patch_image, jar=jar)
+    except PatchImageJar.DoesNotExist:
         return Response(
-            {"error": f"No PatchJar found for patch '{patch_name}' and jar '{jar_name}'."},
+            {"error": (
+                f"No PatchImageJar entry for patch='{patch_name}', "
+                f"image='{image_name}', jar='{jar_name}'."
+            )},
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 5) Find the single PatchProductJar row for (patch_jar, product)
-    try:
-        ppj = PatchProductJar.objects.get(patch_jar_id=patch_jar, product=product)
-    except PatchProductJar.DoesNotExist:
-        return Response(
-            {
-              "error": (
-                f"No PatchProductJar found for patch='{patch_name}', "
-                f"product='{product_name}', jar='{jar_name}'."
-              )
-            },
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    # 6) Update only fields provided in JSON
+    # 6) Update fields if provided
     data = request.data
     updated = False
-
+    if "current_version" in data:
+        pij.current_version = data["current_version"]
+        updated = True
     if "remarks" in data:
-        ppj.remarks = data["remarks"]
+        pij.remarks = data["remarks"]
         updated = True
-
     if "updated" in data:
-        ppj.updated = data["updated"]
+        pij.updated = data["updated"]
         updated = True
 
-    if updated:
-        ppj.save()
+    if not updated:
         return Response(
-            {"status": "success", "remarks": ppj.remarks, "updated": ppj.updated},
-            status=status.HTTP_200_OK
-        )
-    else:
-        return Response(
-            {"error": "No updatable fields ('remarks' or 'updated') provided."},
+            {"error": "No updatable fields provided ('current_version', 'remarks', or 'updated')."},
             status=status.HTTP_400_BAD_REQUEST
         )
+
+    pij.save()
+    return Response(
+        {
+            "status": "success",
+            "current_version": pij.current_version,
+            "remarks": pij.remarks,
+            "updated": pij.updated
+        },
+        status=status.HTTP_200_OK
+    )
 
 
 #api for getting path
