@@ -1,7 +1,7 @@
 from django.utils import timezone
 
 from rest_framework import serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage,ProductSecurityIssue,PatchProductHelmChart
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage,ProductSecurityIssue,PatchProductHelmChart,ReleaseProductImage
 
 class ReleaseSerializer(serializers.ModelSerializer):
     class Meta:
@@ -97,6 +97,69 @@ class ImageSerializer(serializers.ModelSerializer):
         return image
 
 
+# class ProductSerializer(serializers.ModelSerializer):
+#     images = serializers.SerializerMethodField()
+#     helm_charts = serializers.SerializerMethodField()
+
+#     class Meta:
+#         model = Product
+#         fields = [
+#             'name', 'images', 'status', 'created_at', 'updated_at',
+#             'is_deleted', 'helm_charts'
+#         ]
+
+#     def get_helm_charts(self, obj):
+#         # 'obj' is the Product instance
+#         patch = self.context.get('patch')
+#         if not patch:
+#             return None
+#         try:
+#             helm_entry = PatchProductHelmChart.objects.get(patch=patch, product=obj)
+#             return helm_entry.helm_charts
+#         except PatchProductHelmChart.DoesNotExist:
+#             return None
+
+#     def get_images(self, obj):
+#         # 'obj' is the Product instance
+#         patch = self.context.get('patch')
+#         if not patch:
+#             return []
+
+#         # Filter images for this product that belong to the current patch
+#         images_for_patch = obj.images.filter(
+#             build_number=patch.name,
+#             is_deleted=False
+#         )
+
+#         # Build a new context for the ImageSerializer to have access to the product
+#         new_context = self.context.copy()
+#         new_context['product'] = obj
+
+#         # Serialize the filtered images using the updated context
+#         images_data = ImageSerializer(
+#             images_for_patch, many=True, context=new_context
+#         ).data
+
+#         # Inject additional patch-specific data into each image object
+#         for image_data in images_data:
+#             try:
+#                 patch_image = PatchImage.objects.get(
+#                     patch=patch,
+#                     image__image_name=image_data['image_name'],
+#                     image__product=obj
+#                 )
+#                 image_data.update({
+#                     "ot2_pass": patch_image.ot2_pass,
+#                     "registry": patch_image.registry,
+#                     "patch_build_number": patch_image.patch_build_number,
+#                 })
+#             except PatchImage.DoesNotExist:
+#                 # Ensure fields are present even if no PatchImage record exists
+#                 image_data.update({
+#                     "ot2_pass": None, "registry": None, "patch_build_number": None
+#                 })
+#         return images_data
+
 class ProductSerializer(serializers.ModelSerializer):
     images = serializers.SerializerMethodField()
     helm_charts = serializers.SerializerMethodField()
@@ -109,10 +172,10 @@ class ProductSerializer(serializers.ModelSerializer):
         ]
 
     def get_helm_charts(self, obj):
-        # 'obj' is the Product instance
+      
         patch = self.context.get('patch')
         if not patch:
-            return None
+            return None 
         try:
             helm_entry = PatchProductHelmChart.objects.get(patch=patch, product=obj)
             return helm_entry.helm_charts
@@ -120,45 +183,49 @@ class ProductSerializer(serializers.ModelSerializer):
             return None
 
     def get_images(self, obj):
-        # 'obj' is the Product instance
+     
         patch = self.context.get('patch')
-        if not patch:
-            return []
 
-        # Filter images for this product that belong to the current patch
-        images_for_patch = obj.images.filter(
-            build_number=patch.name,
-            is_deleted=False
-        )
+        if patch:
+            images_for_patch = obj.images.filter(
+                build_number=patch.name,
+                is_deleted=False
+            )
 
-        # Build a new context for the ImageSerializer to have access to the product
-        new_context = self.context.copy()
-        new_context['product'] = obj
+         
+            new_context = self.context.copy()
+            new_context['product'] = obj
 
-        # Serialize the filtered images using the updated context
-        images_data = ImageSerializer(
-            images_for_patch, many=True, context=new_context
-        ).data
+            images_data = ImageSerializer(
+                images_for_patch, many=True, context=new_context
+            ).data
 
-        # Inject additional patch-specific data into each image object
-        for image_data in images_data:
-            try:
-                patch_image = PatchImage.objects.get(
-                    patch=patch,
-                    image__image_name=image_data['image_name'],
-                    image__product=obj
-                )
-                image_data.update({
-                    "ot2_pass": patch_image.ot2_pass,
-                    "registry": patch_image.registry,
-                    "patch_build_number": patch_image.patch_build_number,
-                })
-            except PatchImage.DoesNotExist:
-                # Ensure fields are present even if no PatchImage record exists
-                image_data.update({
-                    "ot2_pass": None, "registry": None, "patch_build_number": None
-                })
-        return images_data
+            for image_data in images_data:
+                try:
+                    patch_image = PatchImage.objects.get(
+                        patch=patch,
+                        image__image_name=image_data['image_name'],
+                        image__product=obj
+                    )
+                    image_data.update({
+                        "ot2_pass": patch_image.ot2_pass,
+                        "registry": patch_image.registry,
+                        "patch_build_number": patch_image.patch_build_number,
+                    })
+                except PatchImage.DoesNotExist:
+                    image_data.update({
+                        "ot2_pass": None, "registry": None, "patch_build_number": None
+                    })
+            return images_data
+
+        else:
+            all_images = obj.images.filter(is_deleted=False)
+
+            new_context = {'product': obj}
+            images_data = ImageSerializer(
+                all_images, many=True, context=new_context
+            ).data
+            return images_data
 
 class PatchJarSerializer(serializers.ModelSerializer):
     name    = serializers.CharField(source='jar.name', read_only=True)
@@ -575,3 +642,10 @@ class PatchSerializer(serializers.ModelSerializer):
                     pass
 
         return products_data
+
+
+class ReleaseProductImageSerializer(serializers.ModelSerializer):
+   
+    class Meta:
+        model = ReleaseProductImage
+        fields = '__all__'

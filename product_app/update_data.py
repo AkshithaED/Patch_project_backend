@@ -4,7 +4,7 @@ import sys
 import time
 import os
 
-PRIVATE_TOKEN = os.getenv("PRIVATE_TOKEN")
+PRIVATE_TOKEN = os.getenv("PRIVATE_TOKEN", "8b7bQ6mYoHNNKPJX6Yz4")
 
 GITLAB_URL = os.getenv("GITLAB_URL", "https://gitlab.otxlab.net/api/v4")
 PROJECT_ID = os.getenv("PROJECT_ID", "115935")

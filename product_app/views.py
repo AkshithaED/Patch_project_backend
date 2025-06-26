@@ -1,13 +1,15 @@
 from rest_framework.response import Response
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
-from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchImageJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue
-from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer
+from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchImageJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue,ReleaseProductImage
+from .serializers import ReleaseSerializer, PatchSerializer, ProductSerializer, ImageSerializer, SecurityIssueSerializer, JarSerializer, HighLevelScopeSerializer,ReleaseProductImageSerializer
 from rest_framework.decorators import api_view
 from django.shortcuts import get_object_or_404
 from .data import PATCH_DATA, build_image_url
 from rest_framework.views import APIView
 from .update_data import update_details
+from rest_framework import generics
+
 
 
 
@@ -736,7 +738,33 @@ class PatchDetailView(APIView):
        
         return Response([serializer.data], status=status.HTTP_200_OK)
 
+
+
 class RefDB(APIView):
     def get(self, request, patch_name=None, product_name=None):
+        if product_name == "null":
+            product_name = None
 
-        update_details(patch_name, product_name)
+        try:
+            data = update_details(patch_name, product_name)
+            return Response(data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_200_OK  
+            )
+
+class ReleaseProductImageListAPIView(generics.ListAPIView):
+  
+    serializer_class = ReleaseProductImageSerializer
+
+    def get_queryset(self):
+      
+        release_name = self.kwargs['release_name']
+        product_name = self.kwargs['product_name']
+
+        queryset = ReleaseProductImage.objects.filter(
+            release=release_name,
+            product=product_name
+        )
+        return queryset
