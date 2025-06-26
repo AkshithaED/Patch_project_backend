@@ -742,17 +742,19 @@ class PatchDetailView(APIView):
 
 class RefDB(APIView):
     def get(self, request, patch_name=None, product_name=None):
-        if product_name == "null":
+        if not product_name or product_name.lower() in {"null", "none"}:
             product_name = None
-
+ 
         try:
-            data = update_details(patch_name, product_name)
-            return Response(data, status=status.HTTP_200_OK)
+            update_details(patch_name, product_name)
+            patchdetailsview = PatchDetailView()
+            response = patchdetailsview.get(request, patch_name)
+            data = response.data
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_200_OK  
-            )
+            data = {"message": "Handled error", "error": str(e)}
+ 
+        return Response(data, status=200)
+
 
 class ReleaseProductImageListAPIView(generics.ListAPIView):
   

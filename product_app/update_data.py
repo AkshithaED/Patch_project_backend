@@ -3,13 +3,13 @@ import logging
 import sys
 import time
 import os
-
-PRIVATE_TOKEN = os.getenv("PRIVATE_TOKEN", "8b7bQ6mYoHNNKPJX6Yz4")
-
+ 
+PRIVATE_TOKEN = os.getenv("PRIVATE_TOKEN")
+ 
 GITLAB_URL = os.getenv("GITLAB_URL", "https://gitlab.otxlab.net/api/v4")
 PROJECT_ID = os.getenv("PROJECT_ID", "115935")
 BOT_JOB_NAME = os.getenv("BOT_JOB_NAME", "dummy")
-
+ 
 def trigger_pipeline(CMD: str, patch_input: str = None, product_input: str = None) -> int:
     """
     Trigger a single GitLab pipeline passing patch_input and product_input as variables.
@@ -17,28 +17,28 @@ def trigger_pipeline(CMD: str, patch_input: str = None, product_input: str = Non
     url = f"{GITLAB_URL}/projects/{PROJECT_ID}/pipeline"
     headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
     variables = {"CMD": CMD}
-    
+   
     # Only add variables if they are set
     if patch_input:
-        variables["PATCH_INPUT"] = patch_input
+        variables["PARAM1"] = f"--patch '{patch_input}'"
     if product_input:
-        variables["PRODUCT_INPUT"] = product_input
-
+        variables["PARAM2"] = f"--product '{product_input}'"
+ 
     data = [("ref", "main")]
     for key, value in variables.items():
         data.append((f"variables[][key]", key))
         data.append((f"variables[][value]", value))
-
+ 
     response = requests.post(url, headers=headers, data=data)
     response.raise_for_status()
     pipeline_id = response.json()["id"]
     logging.info(f"Triggered pipeline ID: {pipeline_id} with variables: {variables}")
     return pipeline_id
-
+ 
 def wait_for_pipeline(pipeline_id: int, timeout: int = 1800) -> str:
     url = f"{GITLAB_URL}/projects/{PROJECT_ID}/pipelines/{pipeline_id}"
     headers = {"PRIVATE-TOKEN": PRIVATE_TOKEN}
-
+ 
     start = time.time()
     while True:
         response = requests.get(url, headers=headers)
@@ -50,7 +50,7 @@ def wait_for_pipeline(pipeline_id: int, timeout: int = 1800) -> str:
         if time.time() - start > timeout:
             raise TimeoutError(f"Pipeline {pipeline_id} status check timed out")
         time.sleep(10)
-
+ 
 def update_details(patch_input=None, product_input=None):
     # We trigger one pipeline per patch or patch+product combo
     try:
@@ -63,7 +63,7 @@ def update_details(patch_input=None, product_input=None):
     except Exception as e:
         logging.error(f"Error during pipeline run: {e}")
         sys.exit(1)
-
+ 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Patch Image Orchestrator")
@@ -71,3 +71,4 @@ if __name__ == "__main__":
     parser.add_argument("--product", help="Product name")
     args = parser.parse_args()
     update_details(args.patch, args.product)
+ 
