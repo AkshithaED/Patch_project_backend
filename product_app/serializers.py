@@ -476,7 +476,7 @@ class PatchSerializer(serializers.ModelSerializer):
                         if (cve_id := issue.get('cve_id')):
                             product_security_des = issue.get('product_security_des')
                             security_issue_obj, _ = SecurityIssue.objects.get_or_create(cve_id=cve_id, defaults={'description': issue.get('description')})
-                            ProductSecurityIssue.objects.create(patch=patch, product=pkg, security_issue=security_issue_obj, product_security_des=product_security_des)
+                            ProductSecurityIssue.objects.update_or_create(patch=patch, product=pkg, security_issue=security_issue_obj, product_security_des=product_security_des)
         
         elif products_initial: 
             for pd_raw in products_initial:
