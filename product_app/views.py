@@ -703,7 +703,6 @@ class PatchProductDetailView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            update_details(patch_name, product_name)
 
             serializer = PatchSerializer(patch, context={'request': request})
             
@@ -732,9 +731,12 @@ class PatchDetailView(APIView):
      
         patch = get_object_or_404(Patch, name=patch_name)
 
-        update_details(patch_name)
-
         serializer = PatchSerializer(patch, context={'request': request})
 
        
         return Response([serializer.data], status=status.HTTP_200_OK)
+
+class RefDB(APIView):
+    def get(self, request, patch_name=None, product_name=None):
+
+        update_details(patch_name, product_name)
