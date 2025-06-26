@@ -39,13 +39,6 @@ PATCH_DATA = {
                     "local": {"registry": artifactory_url, "path": "bpdockerhub", "image_name": "ot-dctm-rest"},
                 }
             },
-            "Common": {
-                "dctm-tomcat": {
-                    "registry": {"registry": registry_url, "path": "common", "image_name": "alpinelinux-openjdk-tomcat"},
-                    "ot2paas": {"registry": artifactory_url, "path": "ot2paas", "image_name": "dctm-tomcat"},
-                    "local": {"registry": artifactory_url, "path": "bpdockerhub", "image_name": "dctm-tomcat"},
-                }
-            },
             "D2": {
                 "ot-dctm-d2cp-installer": {
                     "registry": {"registry": registry_url, "path": "", "image_name": "ot-dctm-d2cp-installer"},
