@@ -176,6 +176,78 @@ PATCH_DATA = {
                     },
                 },
             },
+            "DA": {
+                "ot-dctm-admin": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-admin",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-admin",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-admin",
+                    },
+                },
+            },
+            "Records": {
+                "ot-dctm-records": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-records",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-records",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-records",
+                    },
+                },
+                "ot-dctm-records-darinstallation": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-records-darinstallation",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-records-darinstallation",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-records-darinstallation",
+                    },
+                },
+                "ot-dctm-rqm": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-rqm",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-rqm",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-rqm",
+                    },
+                },
+            },
             "Documentum ReST": {
                 "ot-dctm-restart": {
                     "registry": {
@@ -262,7 +334,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-installer",
                     },
                 },
@@ -279,7 +351,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-config",
                     },
                 },
@@ -296,7 +368,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-classic",
                     },
                 },
@@ -313,7 +385,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-rest",
                     },
                 },
@@ -330,7 +402,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-smartview",
                     },
                 },
@@ -347,7 +419,7 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-ijms",
                     },
                 },
@@ -364,8 +436,464 @@ PATCH_DATA = {
                     },
                     "local": {
                         "registry": artifactory_url,
-                        "path": "bpdockerhub",
+                        "path": "cs-dctmclient-docker-rel-local",
                         "image_name": "ot-dctm-client-mobile",
+                    },
+                },
+            },
+            "Workflow Designer": {
+                "ot-dctm-bpm-installer": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-bpm-installer",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-bpm-installer",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-bpm-installer",
+                    },
+                },
+                "ot-dctm-workflow-designer": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-workflow-designer",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-workflow-designer",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-workflow-designer",
+                    },
+                },
+            },
+            "Advanced Workflow": {
+                "ot-dctm-bps": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-bps",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-bps",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-bps",
+                    },
+                },
+                "ot-dctm-xda": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-xda",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-xda",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-xda",
+                    },
+                },
+                "ot-dctm-xda-tools": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-xda-tools",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-xda-tools",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-xda-tools",
+                    },
+                },
+            },
+            "XECM": {
+                "ot-dctm-smartviewm365-ns": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-smartviewm365-ns",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-smartviewm365-ns",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-smartviewm365-ns",
+                    },
+                },
+                "ot-dctm-smartviewm365customjar": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "smartviewm365customjar",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "smartviewm365customjar",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "smartviewm365customjar",
+                    },
+                },
+                "ot-dctm-smartviewm365": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-smartviewm365",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-smartviewm365",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-smartviewm365",
+                    },
+                },
+            },
+            "Content Connect": {
+                "ot-dctm-content-connect-dbinit": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-content-connect-dbinit",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-content-connect-dbinit",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-content-connect-dbinit",
+                    },
+                },
+                "ot-dctm-content-connect": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-content-connect",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-content-connect",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-content-connect",
+                    },
+                },
+            },
+            "SAP Connectors": {
+                "ot-dctm-assap": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-assap",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-assap",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-sapc-docker-rel",
+                        "image_name": "ot-dctm-assap",
+                    },
+                },
+                "ot-dctm-admin-sapconnector": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-admin-sapconnector",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-admin-sapconnector",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-sapc-docker-rel",
+                        "image_name": "ot-dctm-admin-sapconnector",
+                    },
+                },
+                "ot-dctm-cssap": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-cssap",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-cssap",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-sapc-docker-rel",
+                        "image_name": "ot-dctm-cssap",
+                    },
+                },
+                "ot-dctm-assap-ilm": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-assap-ilm",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-assap-ilm",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-sapc-docker-rel",
+                        "image_name": "ot-dctm-assap-ilm",
+                    },
+                },
+            },
+            "Documentum Search": {
+                "ot-dctm-search-admin": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-search-admin",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-search-admin",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-search-admin",
+                    },
+                },
+                "ot-dctm-index-agent": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-index-agent",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-index-agent",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-index-agent",
+                    },
+                },
+                "ot-dctm-search-parser": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-search-parser",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-search-parser",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-search-parser",
+                    },
+                },
+                "ot-dctm-search-agent": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-search-agent",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-search-agent",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-search-agent",
+                    },
+                },
+                "ot-dctm-zk-status-checker": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-zk-status-checker",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-zk-status-checker",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-zk-status-checker",
+                    },
+                },
+                "ot-dctm-content-fetcher": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-content-fetcher",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-content-fetcher",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-content-fetcher",
+                    },
+                },
+                "ot-coresearch-api": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-coresearch-api",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-coresearch-api",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-coresearch-api",
+                    },
+                },
+                "ot-dctm-solr": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-solr",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-solr",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-dctm-solr",
+                    },
+                },
+                "ot-coresearch-indexer": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-coresearch-indexer",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-coresearch-indexer",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "bpdockerhub",
+                        "image_name": "ot-coresearch-indexer",
+                    },
+                },
+            },
+            "DTR": {
+                "ot-dctm-reports-base": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-reports-base",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-reports-base",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-dctmclient-docker-rel-local",
+                        "image_name": "ot-dctm-reports-base",
+                    },
+                },
+                "ot-dctm-reports-d2": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-reports-d2",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-reports-d2",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-dctmclient-docker-rel-local",
+                        "image_name": "ot-dctm-reports-d2",
+                    },
+                },
+                "ot-dctm-reports-installer": {
+                    "registry": {
+                        "registry": registry_url,
+                        "path": "",
+                        "image_name": "ot-dctm-reports-installer",
+                    },
+                    "ot2paas": {
+                        "registry": artifactory_url,
+                        "path": ot2paas,
+                        "image_name": "ot-dctm-reports-installer",
+                    },
+                    "local": {
+                        "registry": artifactory_url,
+                        "path": "cs-dctmclient-docker-rel-local",
+                        "image_name": "ot-dctm-reports-installer",
                     },
                 },
             },
