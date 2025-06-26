@@ -738,5 +738,15 @@ class PatchDetailView(APIView):
 
 class RefDB(APIView):
     def get(self, request, patch_name=None, product_name=None):
-
-        update_details(patch_name, product_name)
+        if not product_name or product_name.lower() in {"null", "none"}:
+            product_name = None
+ 
+        try:
+            update_details(patch_name, product_name)
+            patchdetailsview = PatchDetailView()
+            response = patchdetailsview.get(request, patch_name)
+            data = response.data
+        except Exception as e:
+            data = {"message": "Handled error", "error": str(e)}
+ 
+        return Response(data, status=200)
