@@ -782,7 +782,6 @@ class AllReleaseProductImagesAPIView(ListCreateAPIView):
     serializer_class = ReleaseProductImageSerializer
 
 
-
 @api_view(['PATCH'])
 def update_product_security_description(request, patch_name, product_name, cve_id):
     """
@@ -799,7 +798,8 @@ def update_product_security_description(request, patch_name, product_name, cve_i
     new_description = data['product_security_des']
 
     try:
-
+        # This part is fine, as the unique_together constraint on ProductSecurityIssue
+        # should prevent duplicates here.
         product_security_issue_entry = ProductSecurityIssue.objects.get(
             patch__name=patch_name,
             product__name=product_name,
@@ -816,7 +816,16 @@ def update_product_security_description(request, patch_name, product_name, cve_i
         try:
             patch = Patch.objects.get(name=patch_name)
             product = Product.objects.get(name=product_name)
-            security_issue = SecurityIssue.objects.get(cve_id=cve_id)
+            
+            # --- CHANGE: Use .filter().first() to safely handle duplicates ---
+            # This will get the first matching SecurityIssue and not crash if more than one exist.
+            security_issue = SecurityIssue.objects.filter(cve_id=cve_id).first()
+
+            # --- ADDED: A check in case the CVE doesn't exist at all ---
+            # .first() returns None if no object is found, so we must handle that case.
+            if not security_issue:
+                # Raise the expected exception so the outer except block can catch it.
+                raise SecurityIssue.DoesNotExist(f"No SecurityIssue found for cve_id='{cve_id}'")
 
             product_security_issue_entry = ProductSecurityIssue.objects.create(
                 patch=patch,
@@ -829,7 +838,6 @@ def update_product_security_description(request, patch_name, product_name, cve_i
             message = "Product security description entry created successfully."
 
         except (Patch.DoesNotExist, Product.DoesNotExist, SecurityIssue.DoesNotExist) as e:
-         
             return Response(
                 {"error": f"Cannot create entry because a required component is missing: {e}"},
                 status=status.HTTP_404_NOT_FOUND
