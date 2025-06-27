@@ -408,9 +408,10 @@ class ProductJarRelease(models.Model):
 # -----------------------
 # ProductImageRelease Model
 # -----------------------
+
 class ReleaseProductImage(models.Model):
-    release = models.CharField(max_length=50)         
-    product = models.CharField(max_length=100)         
+    release = models.ForeignKey('Release', on_delete=models.CASCADE)
+    product = models.ForeignKey('Product', on_delete=models.CASCADE)       
     image_name = models.CharField(max_length=255)      
 
     # Registry source

@@ -645,7 +645,15 @@ class PatchSerializer(serializers.ModelSerializer):
 
 
 class ReleaseProductImageSerializer(serializers.ModelSerializer):
-   
+    release = serializers.SlugRelatedField(
+        queryset=Release.objects.all(),
+        slug_field='name'  
+    )
+    product = serializers.SlugRelatedField(
+        queryset=Product.objects.all(),
+        slug_field='name'  
+    )
+
     class Meta:
         model = ReleaseProductImage
         fields = '__all__'

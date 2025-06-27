@@ -8,7 +8,7 @@ from .views import (
     patch_image_jars_list,
     update_patch_image_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,
     PatchProductDetailView,
-    PatchDetailView,RefDB,ReleaseProductImageListAPIView
+    PatchDetailView,RefDB,ReleaseProductImageListAPIView,AllReleaseProductImagesAPIView
 )
 
 release_list = ReleaseViewSet.as_view({
@@ -94,6 +94,10 @@ high_level_scope_detail = HighLevelScopeViewSet.as_view({
     'patch': 'partial_update',
     'delete': 'destroy',
 })
+ 
+
+
+release_product_image_detail = ReleaseProductImageListAPIView.as_view()
 
 urlpatterns = [
     path('releases/', release_list, name='release-list'),
@@ -131,7 +135,7 @@ urlpatterns = [
     path("patches/<str:patch_name>/products/<str:product_name>/", PatchProductDetailView.as_view(), name="patch-product-detail"),
     path('patches/<str:patch_name>/details/', PatchDetailView.as_view(), name='patch-detail'),
     path("patches/<str:patch_name>/products/<str:product_name>/details/", RefDB.as_view(), name="RefDB"),
-    path('release-images/<str:release_name>/<str:product_name>/',ReleaseProductImageListAPIView.as_view(),name='release-product-image-list')
-
+    path('release-images/<str:release_name>/<str:product_name>/<str:image_name>/',release_product_image_detail,name='release_product_image_detail'),
+    path('release-images/',AllReleaseProductImagesAPIView.as_view(),name='AllReleaseProductImagesAPIView'),
 
 ]

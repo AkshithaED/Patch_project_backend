@@ -9,6 +9,7 @@ from .data import PATCH_DATA, build_image_url
 from rest_framework.views import APIView
 from .update_data import update_details
 from rest_framework import generics
+from rest_framework.generics import RetrieveUpdateAPIView,ListCreateAPIView
 
 
 
@@ -756,17 +757,24 @@ class RefDB(APIView):
         return Response(data, status=200)
 
 
-class ReleaseProductImageListAPIView(generics.ListAPIView):
+class ReleaseProductImageListAPIView(RetrieveUpdateAPIView):
   
     serializer_class = ReleaseProductImageSerializer
 
-    def get_queryset(self):
-      
-        release_name = self.kwargs['release_name']
-        product_name = self.kwargs['product_name']
+    def get_object(self):
+        release_name = self.kwargs.get('release_name')
+        product_name = self.kwargs.get('product_name')
+        image_name = self.kwargs.get('image_name')
 
-        queryset = ReleaseProductImage.objects.filter(
-            release=release_name,
-            product=product_name
-        )
-        return queryset
+        try:
+            return ReleaseProductImage.objects.get(
+                release__name=release_name,
+                product__name=product_name,
+                image_name=image_name
+            )
+        except ReleaseProductImage.DoesNotExist:
+            raise NotFound("ReleaseProductImage not found.")
+
+class AllReleaseProductImagesAPIView(ListCreateAPIView):
+    queryset = ReleaseProductImage.objects.all()
+    serializer_class = ReleaseProductImageSerializer
