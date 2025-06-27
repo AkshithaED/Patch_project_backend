@@ -656,6 +656,7 @@ def update_patch_image_jar(request, patch_name, image_name, jar_name):
 
 
 #api for getting path
+
 @api_view(['POST'])
 def build_image_url_endpoint(request):
     payload = request.data
@@ -779,3 +780,71 @@ class ReleaseProductImageListAPIView(RetrieveUpdateAPIView):
 class AllReleaseProductImagesAPIView(ListCreateAPIView):
     queryset = ReleaseProductImage.objects.all()
     serializer_class = ReleaseProductImageSerializer
+
+
+
+@api_view(['PATCH'])
+def update_product_security_description(request, patch_name, product_name, cve_id):
+    """
+    Updates or creates the 'product_security_des' field for a specific 
+    combination of a Patch, Product, and SecurityIssue. 
+    """
+
+    data = request.data
+    if 'product_security_des' not in data:
+        return Response(
+            {"error": "The 'product_security_des' field is required in the request body."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    new_description = data['product_security_des']
+
+    try:
+
+        product_security_issue_entry = ProductSecurityIssue.objects.get(
+            patch__name=patch_name,
+            product__name=product_name,
+            security_issue__cve_id=cve_id
+        )
+        
+        product_security_issue_entry.product_security_des = new_description
+        product_security_issue_entry.save(update_fields=['product_security_des'])
+        
+        status_code = status.HTTP_200_OK
+        message = "Product security description updated successfully."
+
+    except ProductSecurityIssue.DoesNotExist:
+        try:
+            patch = Patch.objects.get(name=patch_name)
+            product = Product.objects.get(name=product_name)
+            security_issue = SecurityIssue.objects.get(cve_id=cve_id)
+
+            product_security_issue_entry = ProductSecurityIssue.objects.create(
+                patch=patch,
+                product=product,
+                security_issue=security_issue,
+                product_security_des=new_description
+            )
+            
+            status_code = status.HTTP_201_CREATED 
+            message = "Product security description entry created successfully."
+
+        except (Patch.DoesNotExist, Product.DoesNotExist, SecurityIssue.DoesNotExist) as e:
+         
+            return Response(
+                {"error": f"Cannot create entry because a required component is missing: {e}"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    return Response(
+        {
+            "status": "success",
+            "message": message,
+            "entry": {
+                "patch": patch_name,
+                "product": product_name,
+                "cve_id": cve_id,
+                "product_security_des": product_security_issue_entry.product_security_des,
+            }
+        },
+        status=status_code
+    )

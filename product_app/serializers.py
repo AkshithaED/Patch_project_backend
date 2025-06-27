@@ -638,6 +638,9 @@ class PatchSerializer(serializers.ModelSerializer):
                             'registry': None,
                         }
                     )
+        
+
+        
 
         # Handle jars_payload
         if jars_payload is not None:
