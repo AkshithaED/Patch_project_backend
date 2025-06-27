@@ -76,13 +76,6 @@ def patch_completion_percentage(request, name):
 
     for product in patch_data.get('products', []):
         for image in product.get('images', []):
-            total_items += 1
-            # registry half-point
-            if image.get('registry', '').lower() == 'released':
-                completed_items += 0.5
-            # ot2_pass half-point
-            if image.get('ot2_pass', '').lower() == 'released':
-                completed_items += 0.5
 
             # fetch the PatchImage row
             try:
@@ -92,6 +85,14 @@ def patch_completion_percentage(request, name):
                 )
             except PatchImage.DoesNotExist:
                 continue
+
+            #  Half‐points from the PatchImage fields directly
+            total_items += 1
+            if (pi.registry or '').lower() == 'released':
+                completed_items += 0.5
+
+            if (pi.ot2_pass or '').lower() == 'released':
+                completed_items += 0.5
 
             # now only count those jars where a PatchJar exists
             pij_qs = PatchImageJar.objects.filter(patch_image=pi)
@@ -130,14 +131,6 @@ def patch_product_completion_status(request, name):
 
         # --- image halves + jar counts per image ---
         for image in product.get('images', []):
-            total_items += 1
-            # registry half-point
-            if image.get('registry', '').lower() == 'released':
-                completed_items += 0.5
-
-            # OT2 half-point
-            if image.get('ot2_pass', '').lower() == 'released':
-                completed_items += 0.5
 
             # fetch the PatchImage instance
             try:
@@ -148,6 +141,14 @@ def patch_product_completion_status(request, name):
             except PatchImage.DoesNotExist:
                 # no jars to count for this image
                 continue
+
+            #  Half‐points from the PatchImage fields directly
+            total_items += 1
+            if (pi.registry or '').lower() == 'released':
+                completed_items += 0.5
+
+            if (pi.ot2_pass or '').lower() == 'released':
+                completed_items += 0.5
 
             # iterate PatchImageJar rows
             pij_qs = PatchImageJar.objects.filter(patch_image=pi)
