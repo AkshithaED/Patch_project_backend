@@ -9,7 +9,7 @@ from .data import PATCH_DATA, build_image_url
 from rest_framework.views import APIView
 from .update_data import update_details
 from rest_framework import generics
-from rest_framework.generics import RetrieveUpdateAPIView,ListCreateAPIView
+from rest_framework.generics import RetrieveUpdateAPIView,ListCreateAPIView,RetrieveUpdateDestroyAPIView
 
 
 
@@ -759,7 +759,7 @@ class RefDB(APIView):
         return Response(data, status=200)
 
 
-class ReleaseProductImageListAPIView(RetrieveUpdateAPIView):
+class ReleaseProductImageListAPIView(RetrieveUpdateDestroyAPIView):
   
     serializer_class = ReleaseProductImageSerializer
 
@@ -798,8 +798,7 @@ def update_product_security_description(request, patch_name, product_name, cve_i
     new_description = data['product_security_des']
 
     try:
-        # This part is fine, as the unique_together constraint on ProductSecurityIssue
-        # should prevent duplicates here.
+       
         product_security_issue_entry = ProductSecurityIssue.objects.get(
             patch__name=patch_name,
             product__name=product_name,
@@ -816,15 +815,10 @@ def update_product_security_description(request, patch_name, product_name, cve_i
         try:
             patch = Patch.objects.get(name=patch_name)
             product = Product.objects.get(name=product_name)
-            
-            # --- CHANGE: Use .filter().first() to safely handle duplicates ---
-            # This will get the first matching SecurityIssue and not crash if more than one exist.
+                      
             security_issue = SecurityIssue.objects.filter(cve_id=cve_id).first()
 
-            # --- ADDED: A check in case the CVE doesn't exist at all ---
-            # .first() returns None if no object is found, so we must handle that case.
             if not security_issue:
-                # Raise the expected exception so the outer except block can catch it.
                 raise SecurityIssue.DoesNotExist(f"No SecurityIssue found for cve_id='{cve_id}'")
 
             product_security_issue_entry = ProductSecurityIssue.objects.create(
