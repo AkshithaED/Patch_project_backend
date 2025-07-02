@@ -362,7 +362,24 @@ def update_patch_data(request):
                     defaults={
                         **({"ot2_pass": img_data["ot2_pass"]} if "ot2_pass" in img_data else {}),
                         **({"registry": img_data["registry"]} if "registry" in img_data else {}),
-                        **({"patch_build_number": img_data["build_number"]} if "build_number" in img_data else {}),
+                        # **({"patch_build_number": img_data["build_number"]} if "build_number" in img_data else {}),
+                         # only update build_number when we’re _not_ already locked
+                        **({
+                            "patch_build_number": img_data["build_number"]
+                        } if (
+                            "build_number" in img_data and
+                            not PatchImage.objects.filter(
+                                patch=patch, image=image, lock=True
+                            ).exists()
+                        ) else {}),
+
+                        # force lock on any new “Released” status
+                        **(
+                            {"lock": True}
+                            if img_data.get("ot2_pass") == "Released"
+                            or img_data.get("registry") == "Released"
+                            else {}
+                        ),
                     }
                 )
 
@@ -850,3 +867,48 @@ def update_product_security_description(request, patch_name, product_name, cve_i
         },
         status=status_code
     )
+
+#Api for build number locking
+@api_view(['PATCH'])
+def toggle_lock_by_names(request):
+    patch_name = request.data.get('patch')
+    image_name = request.data.get('image')
+    lock_val   = request.data.get('lock')
+
+    # Validate required fields
+    if not isinstance(patch_name, str) or not isinstance(image_name, str):
+        return Response(
+            {"detail": "'patch' and 'image' must be strings."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    if not isinstance(lock_val, bool):
+        return Response(
+            {"detail": "'lock' must be a boolean."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Look up the related objects
+    patch_obj = get_object_or_404(Patch, name=patch_name)
+    image_obj = get_object_or_404(Image, image_name=image_name, build_number = patch_name)
+    pi        = get_object_or_404(PatchImage, patch=patch_obj, image=image_obj)
+
+    # Apply your rules
+    if lock_val and not pi.lock:
+        # false → true
+        pi.lock = True
+    elif not lock_val and pi.lock:
+        # true → false
+        pi.lock      = False
+        pi.registry  = 'Not Released'
+        pi.ot2_pass  = 'Not Released'
+    # else: no change
+
+    pi.save()
+    # serializer = PatchImageSerializer(pi, context={'request': request})
+    # return Response(serializer.data, status=status.HTTP_200_OK)
+    return Response({
+        "lock":            pi.lock,
+        "registry":        pi.registry,
+        "ot2_pass":        pi.ot2_pass,
+        "build_number":    pi.patch_build_number,
+    }, status=status.HTTP_200_OK)

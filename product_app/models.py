@@ -362,8 +362,9 @@ class PatchImage(models.Model):
         null=True,
     )
     patch_build_number = models.CharField(max_length=50, blank=True, null=True)
+    #always lock changes from false → true whenever image is released into ot2paas or registry(defined in save() method).
+    lock = models.BooleanField(default=False)
 
-    # other patch-specific fields related to this image
 
 class PatchProductHelmChart(models.Model):
     patch = models.ForeignKey(Patch, on_delete=models.CASCADE)

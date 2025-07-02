@@ -211,6 +211,7 @@ class ProductSerializer(serializers.ModelSerializer):
                         "ot2_pass": patch_image.ot2_pass,
                         "registry": patch_image.registry,
                         "patch_build_number": patch_image.patch_build_number,
+                        "lock" : patch_image.lock,
                     })
                 except PatchImage.DoesNotExist:
                     image_data.update({
