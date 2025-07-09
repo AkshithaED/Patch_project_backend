@@ -236,7 +236,10 @@ class ProductSerializer(serializers.ModelSerializer):
 
         # For each Image, return [image_name, build_number]
         return [
-            [img.image_name, img.build_number]
+            {
+                "image_name": img.image_name,
+                "build_number": img.build_number
+            }
             for img in qs
         ]
 
@@ -741,20 +744,20 @@ class PatchSerializer(serializers.ModelSerializer):
         )
         products_data = serializer.data
 
-        # 3) strip each product_data['images'] down to just the names
-        for product_data in products_data:
-            cleaned = []
-            for item in product_data['images']:
-                if isinstance(item, (list, tuple)):
-                    # [image_name, build_number]
-                    cleaned.append(item[0])
-                elif isinstance(item, dict):
-                    # {"image_name": "...", "build_number": "..."}
-                    cleaned.append(item.get('image_name'))
-                else:
-                    # already a plain string?
-                    cleaned.append(item)
-            product_data['images'] = cleaned
+        # # 3) strip each product_data['images'] down to just the names
+        # for product_data in products_data:
+        #     cleaned = []
+        #     for item in product_data['images']:
+        #         if isinstance(item, (list, tuple)):
+        #             # [image_name, build_number]
+        #             cleaned.append(item[0])
+        #         elif isinstance(item, dict):
+        #             # {"image_name": "...", "build_number": "..."}
+        #             cleaned.append(item.get('image_name'))
+        #         else:
+        #             # already a plain string?
+        #             cleaned.append(item)
+        #     product_data['images'] = cleaned
 
         return products_data
 
