@@ -1,5 +1,5 @@
 from django.utils import timezone
-
+from django.db import transaction
 from rest_framework import serializers
 from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchJar, PatchHighLevelScope, PatchProductImage,PatchImage,ProductSecurityIssue,PatchProductHelmChart,ReleaseProductImage
 
@@ -613,50 +613,70 @@ class PatchSerializer(serializers.ModelSerializer):
         scopes_payload = validated_data.pop('scopes_data', None)
         products_payload = validated_data.pop('products_data', None)
 
-        # Keep original request for intent
-        products_initial = self.initial_data.get('products_data', [])
+        with transaction.atomic():
+            patch = super().update(instance, validated_data)
 
-        # Update Patch simple fields
-        patch = super().update(instance, validated_data)
+            if products_payload is not None:
+               
+                target_links = set()
 
-        # Handle products_images minimal payload
-        if products_payload is not None:
-            for pd in products_payload:
-                # Ensure product exists and is linked
-                pkg, _ = Product.objects.get_or_create(name=pd['name'])
-                patch.products.add(pkg)
+                for product_data in products_payload:
+                    product_instance, _ = Product.objects.get_or_create(name=product_data.get('name'))
+                    
+                    for image_dict in product_data.get('images', []):
+                        image_name = image_dict.get('image_name')
+                        if not image_name:
+                            continue
 
-                for img_data in pd.get('images', []):
-                    image_name = img_data.get('image_name')
-                    if not image_name:
-                        continue
+                        existing_img = Image.objects.filter(image_name=image_name).first()
+                        
+                        if existing_img and existing_img.build_number == patch.name:
+                            img = existing_img
+                            img.is_deleted = False
+                            img.save(update_fields=['is_deleted'])
+                        else:
+                            img, _ = Image.objects.get_or_create(
+                                product=product_instance,
+                                image_name=image_name,
+                                build_number=patch.name,
+                                defaults={'release_date': patch.release_date, 'is_deleted': False}
+                            )
 
-                     # Lookup by both image_name and build_number
-                    img, created = Image.objects.get_or_create(
-                        image_name=image_name,
-                        build_number=patch.name,
-                        defaults={
-                            'product': pkg,
-                            'release_date': patch.release_date,
-                            'is_deleted': False,
-                            'twistlock_report_url': None,
-                            'twistlock_report_clean': None,
-                        }
-                    )
+                        target_links.add((product_instance.pk, img.id))
+
+                        PatchImage.objects.update_or_create(
+                            patch=patch,
+                            image=img,
+                            defaults={
+                                'ot2_pass': image_dict.get('ot2_pass'),
+                                'registry': image_dict.get('registry'),
+                                'patch_build_number': image_dict.get('patch_build_number') or patch.name,
+                            }
+                        )
+
+                current_links = set(
+                    PatchProductImage.objects.filter(patch=patch).values_list('product_id', 'image_id')
+                )
+
+                links_to_add = target_links - current_links
+                links_to_remove = current_links - target_links
+
+                if links_to_remove:
+                    for prod_pk, img_id in links_to_remove:
+                        PatchProductImage.objects.filter(patch=patch, product_id=prod_pk, image_id=img_id).delete()
+                        PatchImage.objects.filter(patch=patch, image_id=img_id).delete()
+
+                if links_to_add:
+                    new_ppi_links = [
+                        PatchProductImage(patch=patch, product_id=prod_pk, image_id=img_id)
+                        for prod_pk, img_id in links_to_add
+                    ]
+                    PatchProductImage.objects.bulk_create(new_ppi_links)
+                
+              
+                all_product_pks = {prod_pk for prod_pk, _ in target_links}
+                patch.products.set(all_product_pks)
             
-                    # Ensure a single PatchImage exists
-                    PatchImage.objects.get_or_create(
-                        patch=patch,
-                        image=img,
-                        defaults={
-                            'patch_build_number': patch.name,
-                            'ot2_pass': None,
-                            'registry': None,
-                        }
-                    )
-        
-
-        
 
         # Handle jars_payload
         if jars_payload is not None:

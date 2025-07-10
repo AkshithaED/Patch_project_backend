@@ -10,7 +10,8 @@ from rest_framework.views import APIView
 from .update_data import update_details
 from rest_framework import generics
 from rest_framework.generics import RetrieveUpdateAPIView,ListCreateAPIView,RetrieveUpdateDestroyAPIView
-
+import requests 
+from django.http import JsonResponse
 
 
 
@@ -273,7 +274,6 @@ def patch_product_completion_status(request, name):
                 if pij.updated or (pij.remarks and pij.remarks.strip()):
                     completed_items += 1
 
-        # classify product
         if total_items > 0 and completed_items == total_items:
             completed_products.append(product.name)
         else:
@@ -909,7 +909,7 @@ class AllReleaseProductImagesAPIView(ListCreateAPIView):
     queryset = ReleaseProductImage.objects.all()
     serializer_class = ReleaseProductImageSerializer
 
-
+#update product security description
 @api_view(['PATCH'])
 def update_product_security_description(request, patch_name, product_name, cve_id):
     """
@@ -1024,58 +1024,162 @@ def toggle_lock_by_names(request):
         "build_number":    pi.patch_build_number,
     }, status=status.HTTP_200_OK)
 
-#api for getting whole images data
+#api for getting whole products images data
 @api_view(['POST'])
-def hydrate_images(request):
-    payload = request.data
+def hydrate_product_images(request):
+    payload = request.data.get('products')
     if not isinstance(payload, list):
         return Response(
-            {"detail": "A list of {image_name, build_number} objects is required."},
+            {"detail": "A list of products is required."},
             status=status.HTTP_400_BAD_REQUEST
         )
-
+    
     output = []
-    for entry in payload:
-        name  = entry.get('image_name')
-        build = entry.get('build_number')
-        if not name or not build:
-            continue  # skip invalid entries
+    for prod in payload:
+        prod_out = {
+            k: prod.get(k)
+            for k in ("name", "status", "created_at", "updated_at", "is_deleted", "helm_charts")
+        }
+        raw_images = prod.get('images') or []
+        hydrated = []
+        for entry in raw_images:
+            name  = entry.get('image_name')
+            build = entry.get('build_number')
+            if not name or not build:
+                continue  # skip invalid entries
 
-        # 1) fetch the Image row (404 if missing)
-        try:
-            img = Image.objects.get(
-                image_name   = name,
-                build_number = build,
-                is_deleted   = False
-            )
-        except Image.DoesNotExist:
-            # skip or optionally return an error for this entry
-            continue
+            # 1) fetch the Image row (404 if missing)
+            try:
+                img = Image.objects.get(
+                    image_name   = name,
+                    build_number = build,
+                    is_deleted   = False
+                )
+            except Image.DoesNotExist:
+                # skip or optionally return an error for this entry
+                continue
 
-        # 2) serialize the Image itself
-        img_data = ImageSerializer(img).data
+            # 2) serialize the Image itself
+            img_data = ImageSerializer(img).data
 
-        # 3) fetch the matching PatchImage (where patch.name == build_number)
-        try:
-            pi = PatchImage.objects.get(
-                patch__name   = build,
-                image         = img
-            )
-            img_data.update({
-                "ot2_pass"           : pi.ot2_pass,
-                "registry"           : pi.registry,
-                "patch_build_number" : pi.patch_build_number,
-                "lock"               : pi.lock,
-            })
-        except PatchImage.DoesNotExist:
-            # leave the new fields null if no PatchImage exists
-            img_data.update({
-                "ot2_pass"           : None,
-                "registry"           : None,
-                "patch_build_number" : build,
-                "lock"               : False,
-            })
+            # 3) fetch the matching PatchImage (where patch.name == build_number)
+            try:
+                pi = PatchImage.objects.get(
+                    patch__name   = build,
+                    image         = img
+                )
+                img_data.update({
+                    "ot2_pass"           : pi.ot2_pass,
+                    "registry"           : pi.registry,
+                    "patch_build_number" : pi.patch_build_number,
+                    "lock"               : pi.lock,
+                })
+            except PatchImage.DoesNotExist:
+                # leave the new fields null if no PatchImage exists
+                img_data.update({
+                    "ot2_pass"           : None,
+                    "registry"           : None,
+                    "patch_build_number" : build,
+                    "lock"               : False,
+                })
 
-        output.append(img_data)
+            hydrated.append(img_data)
+
+        prod_out['images'] = hydrated
+        output.append(prod_out)
 
     return Response(output, status=status.HTTP_200_OK)
+
+class PatchesByProductView(APIView):
+   
+
+    def get(self, request, product_name, format=None):
+      
+        try:
+            base_queryset = Patch.objects.filter(is_deleted=False)
+
+            filtered_patches = base_queryset.filter(products__name__iexact=product_name).distinct()
+
+            if not filtered_patches.exists():
+                return Response(
+                    {"detail": f"No patches found for product '{product_name}'."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            serializer = PatchSerializer(filtered_patches, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+          
+            return Response(
+                {"error": "An unexpected error occurred.", "details": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+# NEW API VIEW for a single product's completion percentage in a patch
+@api_view(['GET'])
+def product_patch_completion_percentage(request, name, product_name):
+    try:
+        # Find the specific patch and product
+        patch = Patch.objects.get(name=name, is_deleted=False)
+        product_obj = Product.objects.get(name=product_name, is_deleted=False)
+    except Patch.DoesNotExist:
+        return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+    except Product.DoesNotExist:
+        return Response({"error": "Product not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    # Use the serializer to get the product's data within the context of the patch
+    serializer = PatchSerializer(patch)
+    patch_data = serializer.data
+
+    # Find the specific product data from the serialized output
+    target_product = None
+    for p in patch_data.get('products', []):
+        if p.get('name') == product_name:
+            target_product = p
+            break
+
+    if not target_product:
+        return Response({"error": f"Product '{product_name}' is not part of patch '{name}'."}, status=status.HTTP_404_NOT_FOUND)
+
+    total_items = 0
+    completed_items = 0
+
+    # Loop through only the images of the target product
+    for image in target_product.get('images', []):
+        # Fetch the PatchImage row to get completion status
+        try:
+            pi = PatchImage.objects.get(
+                patch=patch,
+                image__image_name=image.get('image_name')
+            )
+        except PatchImage.DoesNotExist:
+            continue
+
+     
+        total_items += 1
+        if (pi.registry or '').lower() == 'released':
+            completed_items += 0.5
+
+        if (pi.ot2_pass or '').lower() == 'released':
+            completed_items += 0.5
+        
+        # Get all Jars associated with this specific PatchImage
+        pij_qs = PatchImageJar.objects.filter(patch_image=pi)
+        
+        for pij in pij_qs:
+            # We only count this Jar towards the total if it's managed at the patch level
+            if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
+                continue
+
+            total_items += 1
+            # A jar is "complete" if it's marked as updated OR has remarks
+            if pij.updated or (pij.remarks and pij.remarks.strip()):
+                completed_items += 1
+
+    if total_items == 0:
+        # If there are no trackable items, completion is 0%
+        return Response({"completion_percentage": 0}, status=status.HTTP_200_OK)
+
+    percentage = round((completed_items / total_items) * 100, 2)
+    return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
