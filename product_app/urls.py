@@ -8,7 +8,7 @@ from .views import (
     patch_image_jars_list,
     update_patch_image_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,
     PatchProductDetailView,
-    PatchDetailView,RefDB,ReleaseProductImageListAPIView,AllReleaseProductImagesAPIView,update_product_security_description, toggle_lock_by_names,PatchesByProductView,product_patch_completion_percentage
+    PatchDetailView,RefDB,ReleaseProductImageListAPIView,AllReleaseProductImagesAPIView,update_product_security_description, toggle_lock_by_names,PatchesByProductView,product_patch_completion_percentage, hydrate_images,SecurityReportView
 )
 
 release_list = ReleaseViewSet.as_view({
@@ -153,4 +153,7 @@ urlpatterns = [
         toggle_lock_by_names,
         name='toggle-lock-by-names'
     ),
+    path('images/hydrate/', hydrate_images, name='hydrate-images'),
+    path('security-report/', SecurityReportView.as_view(), name='security-report'),
+
 ]

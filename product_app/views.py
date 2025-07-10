@@ -11,7 +11,9 @@ from .update_data import update_details
 from rest_framework import generics
 from rest_framework.generics import RetrieveUpdateAPIView,ListCreateAPIView,RetrieveUpdateDestroyAPIView
 import requests 
+from django.db.models import Q 
 from django.http import JsonResponse
+from collections import Counter 
 
 
 
@@ -1117,3 +1119,119 @@ def product_patch_completion_percentage(request, name, product_name):
 
     percentage = round((completed_items / total_items) * 100, 2)
     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
+
+
+#api for getting whole images data
+@api_view(['POST'])
+def hydrate_images(request):
+    payload = request.data
+    if not isinstance(payload, list):
+        return Response(
+            {"detail": "A list of {image_name, build_number} objects is required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    output = []
+    for entry in payload:
+        name  = entry.get('image_name')
+        build = entry.get('build_number')
+        if not name or not build:
+            continue  # skip invalid entries
+
+        # 1) fetch the Image row (404 if missing)
+        try:
+            img = Image.objects.get(
+                image_name   = name,
+                build_number = build,
+                is_deleted   = False
+            )
+        except Image.DoesNotExist:
+            # skip or optionally return an error for this entry
+            continue
+
+        # 2) serialize the Image itself
+        img_data = ImageSerializer(img).data
+
+        # 3) fetch the matching PatchImage (where patch.name == build_number)
+        try:
+            pi = PatchImage.objects.get(
+                patch__name   = build,
+                image         = img
+            )
+            img_data.update({
+                "ot2_pass"           : pi.ot2_pass,
+                "registry"           : pi.registry,
+                "patch_build_number" : pi.patch_build_number,
+                "lock"               : pi.lock,
+            })
+        except PatchImage.DoesNotExist:
+            # leave the new fields null if no PatchImage exists
+            img_data.update({
+                "ot2_pass"           : None,
+                "registry"           : None,
+                "patch_build_number" : build,
+                "lock"               : False,
+            })
+
+        output.append(img_data)
+
+    return Response(output, status=status.HTTP_200_OK)
+
+
+
+class SecurityReportView(APIView):
+    """
+    Accepts a POST request with products/images.
+    It returns the enriched product list AND a top-level summary
+    of all vulnerability counts.
+    """
+    def post(self, request, *args, **kwargs):
+        products_from_request = request.data.get('products', [])
+        if not products_from_request:
+            return Response({"error": "Request body must contain 'products' list."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 1. Collect all unique (image_name, build_number) pairs
+        image_identifiers = set()
+        for product in products_from_request:
+            for image in product.get('images', []):
+                if 'image_name' in image and 'build_number' in image:
+                    image_identifiers.add((image['image_name'], image['build_number']))
+        
+        if not image_identifiers:
+            return Response({"vulnerability_summary": {}, "products": products_from_request})
+
+        # 2. Build and execute the efficient database query
+        final_query = Q()
+        for name, build in image_identifiers:
+            final_query |= Q(image_name=name, build_number=build)
+        
+        found_images = Image.objects.filter(final_query).prefetch_related('security_issues')
+
+        # We use collections.Counter for a clean and efficient way to sum up severities.
+        total_counts = Counter()
+        for image in found_images:
+            # The .values_list() is a small optimization to only pull the 'severity' field
+            severities = image.security_issues.values_list('severity', flat=True)
+            total_counts.update(severities)
+
+        # Create a fast lookup map for enriching the product list
+        images_map = {(img.image_name, img.build_number): img for img in found_images}
+
+        #  Enrich the original product list with issue details
+        for product in products_from_request:
+            for image_spec in product.get('images', []):
+                image_obj = images_map.get((image_spec.get('image_name'), image_spec.get('build_number')))
+                
+                if image_obj:
+                    image_spec['security_issues'] = [
+                        {"cve_id": issue.cve_id, "severity": issue.severity, "description": issue.description}
+                        for issue in image_obj.security_issues.all()
+                    ]
+                else:
+                    image_spec['security_issues'] = []
+            
+        #  Return the final response with BOTH the summary and the detailed list
+        return Response({
+            "vulnerability_summary": dict(total_counts), # Convert Counter to a plain dict for JSON
+            # "products": products_from_request
+        })

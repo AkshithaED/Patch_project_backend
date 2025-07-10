@@ -1,5 +1,5 @@
-registry_url = "registry.opentext.com"
-artifactory_url = "artifactory.otxlab.net"
+registry_url = "https://registry.opentext.com"
+artifactory_url = "https://artifactory.otxlab.net"
 ot2paas = "ot2-paas"
 
 PATCH_DATA = {
