@@ -62,43 +62,97 @@ class HighLevelScopeViewSet(viewsets.ModelViewSet):
     lookup_field = 'name'
 
 #api for completion percentage of patch
+# @api_view(['GET'])
+# def patch_completion_percentage(request, name):
+#     try:
+#         patch = Patch.objects.get(name=name, is_deleted=False)
+#     except Patch.DoesNotExist:
+#         return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#     serializer = PatchSerializer(patch)
+#     patch_data = serializer.data
+
+#     total_items = 0
+#     completed_items = 0
+
+#     for product in patch_data.get('products', []):
+#         for image in product.get('images', []):
+
+#             # fetch the PatchImage row
+#             try:
+#                 pi = PatchImage.objects.get(
+#                     patch=patch,
+#                     image__image_name=image.get('image_name')
+#                 )
+#             except PatchImage.DoesNotExist:
+#                 continue
+
+#             #  Half‐points from the PatchImage fields directly
+#             total_items += 1
+#             if (pi.registry or '').lower() == 'released':
+#                 completed_items += 0.5
+
+#             if (pi.ot2_pass or '').lower() == 'released':
+#                 completed_items += 0.5
+
+#             # now only count those jars where a PatchJar exists
+#             pij_qs = PatchImageJar.objects.filter(patch_image=pi)
+#             for pij in pij_qs:
+#                 # skip if there's no matching PatchJar
+#                 if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
+#                     continue
+
+#                 total_items += 1
+#                 if pij.updated or (pij.remarks and pij.remarks.strip()):
+#                     completed_items += 1
+
+#     if total_items == 0:
+#         return Response({"completion_percentage": 0}, status=status.HTTP_200_OK)
+
+#     percentage = round((completed_items / total_items) * 100, 2)
+#     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 def patch_completion_percentage(request, name):
     try:
         patch = Patch.objects.get(name=name, is_deleted=False)
     except Patch.DoesNotExist:
-        return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
-
-    serializer = PatchSerializer(patch)
-    patch_data = serializer.data
+        return Response({"error": "Patch not found."},
+                        status=status.HTTP_404_NOT_FOUND)
 
     total_items = 0
     completed_items = 0
 
-    for product in patch_data.get('products', []):
-        for image in product.get('images', []):
-
-            # fetch the PatchImage row
+    # Loop each product on this patch
+    for product in patch.products.filter(is_deleted=False):
+        # For each image_name tied to this patch/product
+        image_names = (
+            product.images
+                   .filter(build_number=patch.name, is_deleted=False)
+                   .values_list('image_name', flat=True)
+        )
+        for img_name in image_names:
+            # fetch the PatchImage row by patch + image_name + build_number
             try:
                 pi = PatchImage.objects.get(
                     patch=patch,
-                    image__image_name=image.get('image_name')
+                    image__image_name=img_name,
+                    image__build_number=patch.name
                 )
             except PatchImage.DoesNotExist:
                 continue
 
-            #  Half‐points from the PatchImage fields directly
+            # count the two half‐points
             total_items += 1
             if (pi.registry or '').lower() == 'released':
                 completed_items += 0.5
-
             if (pi.ot2_pass or '').lower() == 'released':
                 completed_items += 0.5
 
-            # now only count those jars where a PatchJar exists
-            pij_qs = PatchImageJar.objects.filter(patch_image=pi)
-            for pij in pij_qs:
-                # skip if there's no matching PatchJar
+            # now count any jars under this PatchImage
+            for pij in PatchImageJar.objects.filter(patch_image=pi):
+                # only if a matching PatchJar exists
                 if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
                     continue
 
@@ -107,54 +161,112 @@ def patch_completion_percentage(request, name):
                     completed_items += 1
 
     if total_items == 0:
-        return Response({"completion_percentage": 0}, status=status.HTTP_200_OK)
+        pct = 0
+    else:
+        pct = round((completed_items / total_items) * 100, 2)
 
-    percentage = round((completed_items / total_items) * 100, 2)
-    return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
+    return Response({"completion_percentage": pct},
+                    status=status.HTTP_200_OK)
 
 #api for getting completed and incomplete products
+# @api_view(['GET'])
+# def patch_product_completion_status(request, name):
+#     try:
+#         patch = Patch.objects.get(name=name, is_deleted=False)
+#     except Patch.DoesNotExist:
+#         return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
+
+#     serializer = PatchSerializer(patch)
+#     patch_data = serializer.data
+
+#     completed_products = []
+#     incomplete_products = []
+
+#     for product in patch_data.get('products', []):
+#         total_items = 0
+#         completed_items = 0
+
+#         # --- image halves + jar counts per image ---
+#         for image in product.get('images', []):
+
+#             # fetch the PatchImage instance
+#             try:
+#                 pi = PatchImage.objects.get(
+#                     patch=patch,
+#                     image__image_name=image.get('image_name')
+#                 )
+#             except PatchImage.DoesNotExist:
+#                 # no jars to count for this image
+#                 continue
+
+#             #  Half‐points from the PatchImage fields directly
+#             total_items += 1
+#             if (pi.registry or '').lower() == 'released':
+#                 completed_items += 0.5
+
+#             if (pi.ot2_pass or '').lower() == 'released':
+#                 completed_items += 0.5
+
+#             # iterate PatchImageJar rows
+#             pij_qs = PatchImageJar.objects.filter(patch_image=pi)
+#             for pij in pij_qs:
+#                 # only count if a matching PatchJar exists
+#                 if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
+#                     continue
+
+#                 total_items += 1
+#                 if pij.updated or (pij.remarks and pij.remarks.strip()):
+#                     completed_items += 1
+
+#         # decide bucket
+#         if total_items > 0 and completed_items == total_items:
+#             completed_products.append(product)
+#         else:
+#             incomplete_products.append(product)
+
+#     return Response({
+#         "completed_products": completed_products,
+#         "incomplete_products": incomplete_products
+#     }, status=status.HTTP_200_OK)
 @api_view(['GET'])
 def patch_product_completion_status(request, name):
     try:
         patch = Patch.objects.get(name=name, is_deleted=False)
     except Patch.DoesNotExist:
-        return Response({"error": "Patch not found."}, status=status.HTTP_404_NOT_FOUND)
-
-    serializer = PatchSerializer(patch)
-    patch_data = serializer.data
+        return Response({"error": "Patch not found."},
+                        status=status.HTTP_404_NOT_FOUND)
 
     completed_products = []
     incomplete_products = []
 
-    for product in patch_data.get('products', []):
+    # Evaluate each product under this patch
+    for product in patch.products.filter(is_deleted=False):
         total_items = 0
         completed_items = 0
 
-        # --- image halves + jar counts per image ---
-        for image in product.get('images', []):
+        image_names = (
+            product.images
+                   .filter(build_number=patch.name, is_deleted=False)
+                   .values_list('image_name', flat=True)
+        )
 
-            # fetch the PatchImage instance
+        for img_name in image_names:
             try:
                 pi = PatchImage.objects.get(
                     patch=patch,
-                    image__image_name=image.get('image_name')
+                    image__image_name=img_name,
+                    image__build_number=patch.name
                 )
             except PatchImage.DoesNotExist:
-                # no jars to count for this image
                 continue
 
-            #  Half‐points from the PatchImage fields directly
             total_items += 1
             if (pi.registry or '').lower() == 'released':
                 completed_items += 0.5
-
             if (pi.ot2_pass or '').lower() == 'released':
                 completed_items += 0.5
 
-            # iterate PatchImageJar rows
-            pij_qs = PatchImageJar.objects.filter(patch_image=pi)
-            for pij in pij_qs:
-                # only count if a matching PatchJar exists
+            for pij in PatchImageJar.objects.filter(patch_image=pi):
                 if not PatchJar.objects.filter(patch=patch, jar=pij.jar).exists():
                     continue
 
@@ -163,15 +275,14 @@ def patch_product_completion_status(request, name):
                     completed_items += 1
 
         if total_items > 0 and completed_items == total_items:
-            completed_products.append(product)
+            completed_products.append(product.name)
         else:
-            incomplete_products.append(product)
+            incomplete_products.append(product.name)
 
     return Response({
         "completed_products": completed_products,
         "incomplete_products": incomplete_products
     }, status=status.HTTP_200_OK)
-
 
 
 #api for populating tables in database
@@ -868,7 +979,6 @@ def update_product_security_description(request, patch_name, product_name, cve_i
         status=status_code
     )
 
-<<<<<<< HEAD
 #Api for build number locking
 @api_view(['PATCH'])
 def toggle_lock_by_names(request):
@@ -913,7 +1023,6 @@ def toggle_lock_by_names(request):
         "ot2_pass":        pi.ot2_pass,
         "build_number":    pi.patch_build_number,
     }, status=status.HTTP_200_OK)
-=======
 
 class PatchesByProductView(APIView):
    
@@ -1008,4 +1117,3 @@ def product_patch_completion_percentage(request, name, product_name):
 
     percentage = round((completed_items / total_items) * 100, 2)
     return Response({"completion_percentage": percentage}, status=status.HTTP_200_OK)
->>>>>>> demo2
