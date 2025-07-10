@@ -1023,3 +1023,59 @@ def toggle_lock_by_names(request):
         "ot2_pass":        pi.ot2_pass,
         "build_number":    pi.patch_build_number,
     }, status=status.HTTP_200_OK)
+
+#api for getting whole images data
+@api_view(['POST'])
+def hydrate_images(request):
+    payload = request.data
+    if not isinstance(payload, list):
+        return Response(
+            {"detail": "A list of {image_name, build_number} objects is required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    output = []
+    for entry in payload:
+        name  = entry.get('image_name')
+        build = entry.get('build_number')
+        if not name or not build:
+            continue  # skip invalid entries
+
+        # 1) fetch the Image row (404 if missing)
+        try:
+            img = Image.objects.get(
+                image_name   = name,
+                build_number = build,
+                is_deleted   = False
+            )
+        except Image.DoesNotExist:
+            # skip or optionally return an error for this entry
+            continue
+
+        # 2) serialize the Image itself
+        img_data = ImageSerializer(img).data
+
+        # 3) fetch the matching PatchImage (where patch.name == build_number)
+        try:
+            pi = PatchImage.objects.get(
+                patch__name   = build,
+                image         = img
+            )
+            img_data.update({
+                "ot2_pass"           : pi.ot2_pass,
+                "registry"           : pi.registry,
+                "patch_build_number" : pi.patch_build_number,
+                "lock"               : pi.lock,
+            })
+        except PatchImage.DoesNotExist:
+            # leave the new fields null if no PatchImage exists
+            img_data.update({
+                "ot2_pass"           : None,
+                "registry"           : None,
+                "patch_build_number" : build,
+                "lock"               : False,
+            })
+
+        output.append(img_data)
+
+    return Response(output, status=status.HTTP_200_OK)
