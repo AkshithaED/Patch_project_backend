@@ -913,73 +913,56 @@ class AllReleaseProductImagesAPIView(ListCreateAPIView):
 
 
 @api_view(['PATCH'])
-def update_product_security_description(request, patch_name, product_name, cve_id):
+def update_product_security_description_view(request, patch_name, product_name, cve_id):
     """
-    Updates or creates the 'product_security_des' field for a specific 
-    combination of a Patch, Product, and SecurityIssue. 
+    Updates or creates a security description based on the direct existence of
+    the Patch, Product, and SecurityIssue, without validating the relationships
+    between them.
     """
-
     data = request.data
-    if 'product_security_des' not in data:
+    
+    # --- STEP 1: Get data from the request body ---
+    try:
+        cvss_score = data['cvss_score']
+        severity = data['severity']
+        affected_libraries = data['affected_libraries']
+        new_description = data['product_security_des']
+    except KeyError as e:
         return Response(
-            {"error": "The 'product_security_des' field is required in the request body."},
+            {"error": f"Missing required field in request body: {e}"},
             status=status.HTTP_400_BAD_REQUEST
         )
-    new_description = data['product_security_des']
 
+    # --- STEP 2: Find all three required objects ---
+    # The view will fail if any of these three do not exist.
     try:
-       
-        product_security_issue_entry = ProductSecurityIssue.objects.get(
-            patch__name=patch_name,
-            product__name=product_name,
-            security_issue__cve_id=cve_id
+        patch_obj = Patch.objects.get(name=patch_name)
+        product_obj = Product.objects.get(name=product_name)
+        security_issue_obj = SecurityIssue.objects.get(
+            cve_id=cve_id,
+            cvss_score=cvss_score,
+            severity=severity,
+            affected_libraries=affected_libraries
         )
-        
-        product_security_issue_entry.product_security_des = new_description
-        product_security_issue_entry.save(update_fields=['product_security_des'])
-        
-        status_code = status.HTTP_200_OK
-        message = "Product security description updated successfully."
+    except (Patch.DoesNotExist, Product.DoesNotExist, SecurityIssue.DoesNotExist) as e:
+        # If any object is not found, return a 404 error.
+        return Response(
+            {"error": f"A required component could not be found: {e}"},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-    except ProductSecurityIssue.DoesNotExist:
-        try:
-            patch = Patch.objects.get(name=patch_name)
-            product = Product.objects.get(name=product_name)
-                      
-            security_issue = SecurityIssue.objects.filter(cve_id=cve_id).first()
-
-            if not security_issue:
-                raise SecurityIssue.DoesNotExist(f"No SecurityIssue found for cve_id='{cve_id}'")
-
-            product_security_issue_entry = ProductSecurityIssue.objects.create(
-                patch=patch,
-                product=product,
-                security_issue=security_issue,
-                product_security_des=new_description
-            )
-            
-            status_code = status.HTTP_201_CREATED 
-            message = "Product security description entry created successfully."
-
-        except (Patch.DoesNotExist, Product.DoesNotExist, SecurityIssue.DoesNotExist) as e:
-            return Response(
-                {"error": f"Cannot create entry because a required component is missing: {e}"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-    return Response(
-        {
-            "status": "success",
-            "message": message,
-            "entry": {
-                "patch": patch_name,
-                "product": product_name,
-                "cve_id": cve_id,
-                "product_security_des": product_security_issue_entry.product_security_des,
-            }
-        },
-        status=status_code
+    # --- STEP 3: If all objects were found, update or create the entry ---
+    entry, created = ProductSecurityIssue.objects.update_or_create(
+        patch=patch_obj,
+        product=product_obj,
+        security_issue=security_issue_obj,
+        defaults={'product_security_des': new_description}
     )
+    
+    status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    message = "Entry created successfully." if created else "Entry updated successfully."
+
+    return Response({"status": "success", "message": message}, status=status_code)
 
 #Api for build number locking
 @api_view(['PATCH'])
@@ -1235,3 +1218,40 @@ class SecurityReportView(APIView):
             "vulnerability_summary": dict(total_counts), # Convert Counter to a plain dict for JSON
             # "products": products_from_request
         })
+
+@api_view(['POST']) 
+def get_security_description(request):
+    """
+    Fetches a single product_security_des value by taking all required
+    identifiers from the POST request body.
+    """
+    data = request.data
+    try:
+        patch_name = data['patchName']
+        product_name = data['productName']
+        cve_id = data['cve_id']
+        cvss_score = data['cvss_score']
+        severity = data['severity']
+        affected_libraries = data['affected_libraries']
+    except KeyError as e:
+        return Response({"error": f"Missing required field in request body: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        security_issue_obj = SecurityIssue.objects.get(
+            cve_id=cve_id,
+            cvss_score=cvss_score,
+            severity=severity,
+            affected_libraries=affected_libraries
+        )
+        
+        entry = ProductSecurityIssue.objects.get(
+            patch__name=patch_name,
+            product__name=product_name,
+            security_issue=security_issue_obj
+        )
+        description = entry.product_security_des
+        
+    except (SecurityIssue.DoesNotExist, ProductSecurityIssue.DoesNotExist):
+        description = ""
+
+    return Response({"product_security_des": description})

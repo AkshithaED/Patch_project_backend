@@ -81,6 +81,7 @@ class ImageSerializer(serializers.ModelSerializer):
             'security_issues',
             'security_issue_ids',
         ]
+        
 
     # create/update methods 
     def create(self, validated_data):

@@ -8,7 +8,7 @@ from .views import (
     patch_image_jars_list,
     update_patch_image_jar, build_image_url_endpoint,product_jar_release_list,release_product_image_list,
     PatchProductDetailView,
-    PatchDetailView,RefDB,ReleaseProductImageListAPIView,AllReleaseProductImagesAPIView,update_product_security_description, toggle_lock_by_names,PatchesByProductView,product_patch_completion_percentage, hydrate_images,SecurityReportView
+    PatchDetailView,RefDB,ReleaseProductImageListAPIView,AllReleaseProductImagesAPIView,update_product_security_description_view, toggle_lock_by_names,PatchesByProductView,product_patch_completion_percentage, hydrate_images,SecurityReportView,get_security_description
 )
 
 release_list = ReleaseViewSet.as_view({
@@ -139,8 +139,8 @@ urlpatterns = [
     path('release-images/',AllReleaseProductImagesAPIView.as_view(),name='AllReleaseProductImagesAPIView'),
     path(
         'patches/<str:patch_name>/products/<str:product_name>/security-issues/<str:cve_id>/',
-         update_product_security_description,
-         name='update_product_security_description'
+         update_product_security_description_view,
+         name='update_product_security_description_view'
     ),
     path(
             'patches/product/<str:product_name>/',
@@ -155,5 +155,7 @@ urlpatterns = [
     ),
     path('images/hydrate/', hydrate_images, name='hydrate-images'),
     path('security-report/', SecurityReportView.as_view(), name='security-report'),
+    path('get-security-description/', get_security_description, name='get_security_description'),
+
 
 ]
