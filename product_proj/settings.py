@@ -83,13 +83,23 @@ WSGI_APPLICATION = 'product_proj.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
  
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
+# POSTGRES Connection
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'product_db',          # your Postgres database name
+        'USER': 'product_user',        # your Postgres username
+        'PASSWORD': 'postgres',   # your Postgres password
+        'HOST': '10.194.49.58',           # usually localhost for local setup
+        'PORT': '5432',                # default Postgres port
     }
 }
- 
  
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
