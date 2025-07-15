@@ -911,7 +911,7 @@ class AllReleaseProductImagesAPIView(ListCreateAPIView):
     queryset = ReleaseProductImage.objects.all()
     serializer_class = ReleaseProductImageSerializer
 
-
+#update product security description
 @api_view(['PATCH'])
 def update_product_security_description_view(request, patch_name, product_name, cve_id):
     """
@@ -1008,6 +1008,72 @@ def toggle_lock_by_names(request):
         "ot2_pass":        pi.ot2_pass,
         "build_number":    pi.patch_build_number,
     }, status=status.HTTP_200_OK)
+
+#api for getting whole products images data
+@api_view(['POST'])
+def hydrate_product_images(request):
+    payload = request.data.get('products')
+    if not isinstance(payload, list):
+        return Response(
+            {"detail": "A list of products is required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    output = []
+    for prod in payload:
+        prod_out = {
+            k: prod.get(k)
+            for k in ("name", "status", "created_at", "updated_at", "is_deleted", "helm_charts")
+        }
+        raw_images = prod.get('images') or []
+        hydrated = []
+        for entry in raw_images:
+            name  = entry.get('image_name')
+            build = entry.get('build_number')
+            if not name or not build:
+                continue  # skip invalid entries
+
+            # 1) fetch the Image row (404 if missing)
+            try:
+                img = Image.objects.get(
+                    image_name   = name,
+                    build_number = build,
+                    is_deleted   = False
+                )
+            except Image.DoesNotExist:
+                # skip or optionally return an error for this entry
+                continue
+
+            # 2) serialize the Image itself
+            img_data = ImageSerializer(img).data
+
+            # 3) fetch the matching PatchImage (where patch.name == build_number)
+            try:
+                pi = PatchImage.objects.get(
+                    patch__name   = build,
+                    image         = img
+                )
+                img_data.update({
+                    "ot2_pass"           : pi.ot2_pass,
+                    "registry"           : pi.registry,
+                    "patch_build_number" : pi.patch_build_number,
+                    "lock"               : pi.lock,
+                })
+            except PatchImage.DoesNotExist:
+                # leave the new fields null if no PatchImage exists
+                img_data.update({
+                    "ot2_pass"           : None,
+                    "registry"           : None,
+                    "patch_build_number" : build,
+                    "lock"               : False,
+                })
+
+            hydrated.append(img_data)
+
+        prod_out['images'] = hydrated
+        output.append(prod_out)
+
+    return Response(output, status=status.HTTP_200_OK)
 
 class PatchesByProductView(APIView):
    
