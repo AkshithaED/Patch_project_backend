@@ -1,4 +1,5 @@
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.db import transaction
 from rest_framework import viewsets, status, serializers
 from .models import Release, Patch, Product, Image, Jar, HighLevelScope, SecurityIssue, PatchProductImage, PatchProductJar, PatchImageJar, PatchJar, PatchImage, PatchProductHelmChart,ProductJarRelease, ReleaseProductImage,ProductSecurityIssue,ReleaseProductImage
@@ -16,6 +17,15 @@ from django.http import JsonResponse
 from collections import Counter 
 
 
+class LogoutView(APIView):
+     def post(self, request):
+          try:
+               refresh_token = request.data["refresh_token"]
+               token = RefreshToken(refresh_token)
+               token.blacklist()
+               return Response(status=status.HTTP_205_RESET_CONTENT)
+          except Exception as e:
+               return Response(status=status.HTTP_400_BAD_REQUEST)
 
 class ReleaseViewSet(viewsets.ModelViewSet):
     queryset = Release.objects.filter(is_deleted=False)
