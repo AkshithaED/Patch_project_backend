@@ -15,6 +15,7 @@ import requests
 from django.db.models import Q 
 from django.http import JsonResponse
 from collections import Counter 
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class LogoutView(APIView):
@@ -25,7 +26,7 @@ class LogoutView(APIView):
                token.blacklist()
                return Response(status=status.HTTP_205_RESET_CONTENT)
           except Exception as e:
-               return Response(status=status.HTTP_400_BAD_REQUEST)
+               return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class ReleaseViewSet(viewsets.ModelViewSet):
     queryset = Release.objects.filter(is_deleted=False)

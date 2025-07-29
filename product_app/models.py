@@ -17,9 +17,13 @@ class CustomUser(AbstractUser):
         ('product_owner', 'Product Owner'),
         ('end_user', 'End User'),
     )
+    email = models.EmailField(unique=True)
     role = models.CharField(max_length=30, choices=ROLE_CHOICES, default='end_user')
     groups = models.ManyToManyField('auth.Group', related_name='customuser_set', blank=True)
     user_permissions = models.ManyToManyField('auth.Permission', related_name='customuser_set', blank=True)
+    # Optional: You can set email to be the USERNAME_FIELD (login field)
+    USERNAME_FIELD = 'email'  # This will make email the field for authentication instead of the username
+    REQUIRED_FIELDS = ['username']  # Keeps the username field for creating superusers
 
     def __str__(self):
         return self.username or 'No username set'

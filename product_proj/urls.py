@@ -20,15 +20,16 @@ from rest_framework.routers import DefaultRouter
 from product_app.views import ReleaseViewSet, PatchViewSet, ProductViewSet, ImageViewSet
 from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework_simplejwt import views as jwt_views
+from product_app.serializers import CustomTokenObtainPairSerializer
 
 from django.shortcuts import redirect
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('token/', 
-          jwt_views.TokenObtainPairView.as_view(), 
-          name ='token_obtain_pair'),
-     path('token/refresh/', 
-          jwt_views.TokenRefreshView.as_view(), 
-          name ='token_refresh'),
+        jwt_views.TokenObtainPairView.as_view(serializer_class=CustomTokenObtainPairSerializer), 
+        name='token_obtain_pair'),
+    path('token/refresh/', 
+        jwt_views.TokenRefreshView.as_view(), 
+        name='token_refresh'),
     path('api/', include('product_app.urls')),  # include the app urls
 ]
