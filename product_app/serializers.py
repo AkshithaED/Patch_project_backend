@@ -30,7 +30,6 @@ class SecurityIssueSerializer(serializers.ModelSerializer):
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         # Get email and password from the request
-        print("attributes : ",attrs)
         email = attrs.get('email')
         password = attrs.get('password')
 
